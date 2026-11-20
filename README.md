@@ -54,7 +54,6 @@ docker pull registry.cn-beijing.aliyuncs.com/mxc/iutone:latest
 ```bash
 docker run -d --name iutone --restart unless-stopped --network host \
   -v /share/Container/iutone/data:/data \
-  -v /share/video:/media/videos:ro \
   -e HTTPS_PROXY=http://<代理地址>:7890 -e HTTP_PROXY=http://<代理地址>:7890 \
   -e NO_PROXY=localhost,127.0.0.1,192.168.0.0/16,10.0.0.0/8,.local \
   registry.cn-beijing.aliyuncs.com/mxc/iutone:latest
@@ -63,7 +62,8 @@ docker run -d --name iutone --restart unless-stopped --network host \
 - **必须 `--network host`**：App 靠 Bonjour（mDNS）发现服务，桥接网络里广播出不去。端口默认 8090，配置里的 `port` 可改。
 - **数据目录** `/data`：`config.yaml`、各源的登录态和观看进度、装的插件都在这里，升级镜像不丢。第一次启动会写一份空配置，
   这时只有调试页，没有任何源。
-- **视频目录**按需挂载，在配置里给 `folder` 源用。群晖、威联通的共享文件夹常是符号链接，挂载真实路径（`readlink -f`）。
+- **视频目录**默认不挂、也不开「本地视频」源。要用时加 `-v /share/video:/media/videos:ro`，再在配置里加上 `folder` 源。
+  群晖、威联通的共享文件夹常是符号链接，挂载真实路径（`readlink -f`）。
 - **代理**：服务去平台取数据、yt-dlp 取流都走 `HTTPS_PROXY` / `HTTP_PROXY`（大小写两种都认）。`NO_PROXY` 一定要带上局域网
   网段，否则访问局域网里的东西也会绕到代理上。App 访问这个服务不走代理，只连局域网。
 - 用 compose 的话见 `docker-compose.yml`（同样是 host 网络，带一个可选的 PO Token 服务）。
@@ -76,12 +76,13 @@ docker run -d --name iutone --restart unless-stopped --network host \
 name: 客厅 NAS              # App 里显示的服务名
 port: 8090
 sources:
-  - id: videos
-    plugin: "@iyt-source/folder"
-    options: { path: /media/videos, name: 本地视频 }   # 一级目录是频道，频道下的目录是节目
   - id: youtube
     plugin: ./repo/source-plugins/youtube              # 相对数据目录；镜像不带平台的源
     options: { language: zh-CN }
+  # 可选：本地视频目录（要先挂载视频目录）。一级目录是频道，频道下的目录是节目
+  # - id: videos
+  #   plugin: "@iyt-source/folder"
+  #   options: { path: /media/videos, name: 本地视频 }
 ```
 
 镜像里只有示例源 `folder`。平台的源（比如 YouTube）是单独的插件，放进数据目录、在配置里写路径加载；插件
