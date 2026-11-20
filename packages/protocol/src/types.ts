@@ -566,6 +566,8 @@ export interface Stream {
   fallback?: Variant
   lowerVariants?: Variant[]
   fairPlay?: FairPlayEndpoints
+  /** App 能否缓存到本地，默认 true（§6.1）。要缓存的 HLS 必须是完整的点播 playlist（有 `EXT-X-ENDLIST`）。 */
+  keepable?: boolean
 }
 
 export interface Chapter {
