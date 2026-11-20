@@ -61,7 +61,10 @@ export interface ServerInfo {
 export interface Brand {
   /** 彩色 logo，PNG，正方形，≥ 256 px。 */
   logo?: URLString
-  /** 首页 tab 图标，透明底单色 PNG，按模板图渲染。 */
+  /**
+   * 首页 tab 图标，透明底单色 PNG，按模板图渲染，**按 @3x 解读**：90×63 px 显示为 30×21 pt（和 App 内置平台的一样，
+   * 高约 21 pt，宽随图形）。
+   */
   tabIcon?: URLString
   tabIconIsWordmark?: boolean
   tint?: string

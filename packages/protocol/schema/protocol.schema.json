@@ -126,7 +126,7 @@
         },
         "tabIcon": {
           "$ref": "#/definitions/URLString",
-          "description": "首页 tab 图标，透明底单色 PNG，按模板图渲染。"
+          "description": "首页 tab 图标，透明底单色 PNG，按模板图渲染，**按"
         },
         "tabIconIsWordmark": {
           "type": "boolean"
