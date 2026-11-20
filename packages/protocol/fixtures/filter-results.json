@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "s1",
+      "title": "示例剧",
+      "posterURL": "https://img.example.com/s1-poster.jpg",
+      "landscapeURL": "https://img.example.com/s1-wide.jpg",
+      "caption": "24集全",
+      "target": {
+        "show": "s1"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "另一部剧",
+      "posterURL": "https://img.example.com/s2-poster.jpg",
+      "landscapeURL": "https://img.example.com/s2-wide.jpg",
+      "caption": "24集全",
+      "target": {
+        "show": "s2"
+      }
+    }
+  ],
+  "next": "2"
+}

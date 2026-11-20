@@ -1,0 +1,33 @@
+[
+  {
+    "id": "sort",
+    "title": "排序",
+    "options": [
+      {
+        "id": "hot",
+        "title": "最热"
+      },
+      {
+        "id": "new",
+        "title": "最新"
+      }
+    ],
+    "defaultOptionID": "hot",
+    "isSort": true
+  },
+  {
+    "id": "area",
+    "title": "地区",
+    "options": [
+      {
+        "id": "all",
+        "title": "全部"
+      },
+      {
+        "id": "cn",
+        "title": "内地"
+      }
+    ],
+    "defaultOptionID": "all"
+  }
+]

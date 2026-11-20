@@ -1,0 +1,16 @@
+{
+  "name": "@iyt-source/cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "iyt-source": "./src/main.ts"
+  },
+  "dependencies": {
+    "@iyt-source/folder": "workspace:*",
+    "@iyt-source/kit": "workspace:*",
+    "@iyt-source/protocol": "workspace:*",
+    "yaml": "^2.8.0",
+    "undici": "^7.16.0"
+  }
+}

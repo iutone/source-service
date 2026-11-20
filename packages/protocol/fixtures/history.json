@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": "e3",
+      "showID": "s1",
+      "title": "示例剧 第3集",
+      "subtitle": "看到 12:30",
+      "coverURL": "https://img.example.com/e3.jpg",
+      "posterURL": "https://img.example.com/s1-poster.jpg",
+      "progress": 0.42,
+      "watchedPercent": 42,
+      "caption": "24集全",
+      "lastWatched": "2026-11-20T10:00:00Z",
+      "device": {
+        "kind": "tv",
+        "name": "电视"
+      },
+      "isPlayable": true,
+      "historyKey": "h-e3"
+    }
+  ],
+  "hasMore": false
+}

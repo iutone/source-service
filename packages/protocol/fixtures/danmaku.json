@@ -1,0 +1,16 @@
+[
+  {
+    "id": "d2-1",
+    "time": 121.5,
+    "text": "前方高能",
+    "position": "scroll",
+    "color": "#FFFFFF"
+  },
+  {
+    "id": "d2-2",
+    "time": 123,
+    "text": "顶部弹幕",
+    "position": "top",
+    "color": "#FE0302"
+  }
+]

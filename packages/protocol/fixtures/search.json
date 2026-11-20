@@ -1,0 +1,78 @@
+{
+  "topMatch": {
+    "show": {
+      "id": "s1",
+      "title": "示例剧",
+      "posterURL": "https://img.example.com/s1-poster.jpg",
+      "landscapeURL": "https://img.example.com/s1-wide.jpg",
+      "caption": "24集全",
+      "target": {
+        "show": "s1"
+      }
+    },
+    "facts": "电视剧 · 2026 · 中国",
+    "summary": "一部示例剧。",
+    "cast": "演员：甲 乙",
+    "episodes": [
+      {
+        "id": "e1",
+        "showID": "s1",
+        "title": "示例剧 第1集",
+        "subtitle": "看到 12:30",
+        "coverURL": "https://img.example.com/e1.jpg",
+        "posterURL": "https://img.example.com/s1-poster.jpg",
+        "progress": 0,
+        "watchedPercent": 0,
+        "caption": "24集全",
+        "isPlayable": true
+      },
+      {
+        "id": "e2",
+        "showID": "s1",
+        "title": "示例剧 第2集",
+        "subtitle": "看到 12:30",
+        "coverURL": "https://img.example.com/e2.jpg",
+        "posterURL": "https://img.example.com/s1-poster.jpg",
+        "progress": 0,
+        "watchedPercent": 0,
+        "caption": "24集全",
+        "isPlayable": true
+      }
+    ]
+  },
+  "shows": [
+    {
+      "id": "s2",
+      "title": "另一部剧",
+      "posterURL": "https://img.example.com/s2-poster.jpg",
+      "landscapeURL": "https://img.example.com/s2-wide.jpg",
+      "caption": "24集全",
+      "target": {
+        "show": "s2"
+      }
+    }
+  ],
+  "videos": [
+    {
+      "id": "v1",
+      "title": "示例剧 混剪",
+      "landscapeURL": "https://img.example.com/v1.jpg",
+      "uploader": {
+        "id": "u1",
+        "name": "某 UP 主",
+        "avatarURL": "https://img.example.com/u1.jpg"
+      },
+      "stats": {
+        "views": 12345,
+        "danmaku": 67,
+        "likes": 890
+      },
+      "duration": 754,
+      "publishedAt": "2026-11-19T08:00:00Z",
+      "target": {
+        "video": "v1"
+      }
+    }
+  ],
+  "moreVideos": "v2"
+}

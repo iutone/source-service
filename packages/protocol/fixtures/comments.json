@@ -1,0 +1,63 @@
+{
+  "comments": [
+    {
+      "id": "c1",
+      "author": {
+        "name": "观众甲",
+        "avatarURL": "https://img.example.com/a1.jpg",
+        "nameColor": "#FB7299",
+        "role": "UP主"
+      },
+      "text": "好看[doge]",
+      "emotes": {
+        "[doge]": "https://img.example.com/doge.jpg"
+      },
+      "date": "2026-11-20T09:00:00Z",
+      "location": "广东",
+      "likes": 321,
+      "pictures": [
+        "https://img.example.com/pic1.jpg"
+      ],
+      "replyCount": 12,
+      "previewReplies": [
+        {
+          "id": "c1r1",
+          "author": {
+            "name": "观众甲",
+            "avatarURL": "https://img.example.com/a1.jpg",
+            "nameColor": "#FB7299",
+            "role": "UP主"
+          },
+          "text": "同意",
+          "emotes": {
+            "[doge]": "https://img.example.com/doge.jpg"
+          },
+          "date": "2026-11-20T09:00:00Z",
+          "location": "广东",
+          "likes": 3,
+          "repliesTo": "观众甲"
+        }
+      ],
+      "replies": "replies:c1",
+      "isPinned": true
+    },
+    {
+      "id": "c2",
+      "author": {
+        "name": "观众甲",
+        "avatarURL": "https://img.example.com/a1.jpg",
+        "nameColor": "#FB7299",
+        "role": "UP主"
+      },
+      "text": "第二条评论",
+      "emotes": {
+        "[doge]": "https://img.example.com/doge.jpg"
+      },
+      "date": "2026-11-20T09:00:00Z",
+      "location": "广东",
+      "likes": 321
+    }
+  ],
+  "next": "comments:2",
+  "total": 1234
+}

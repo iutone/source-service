@@ -1,0 +1,19 @@
+[
+  {
+    "id": "hot",
+    "title": "热搜",
+    "items": [
+      {
+        "id": "s1",
+        "title": "示例剧",
+        "posterURL": "https://img.example.com/s1-poster.jpg",
+        "landscapeURL": "https://img.example.com/s1-wide.jpg",
+        "caption": "24集全",
+        "target": {
+          "show": "s1"
+        },
+        "rank": 1
+      }
+    ]
+  }
+]

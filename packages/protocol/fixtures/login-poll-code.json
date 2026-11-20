@@ -1,0 +1,12 @@
+{
+  "loginId": "LOGIN_ID",
+  "seq": 1,
+  "step": {
+    "kind": "showCode",
+    "content": "https://example.com/device?user_code=ABCD-EFGH",
+    "title": "用手机扫码",
+    "message": "或在浏览器打开 example.com/device，输入 ABCD-EFGH",
+    "openURL": "https://example.com/device?user_code=ABCD-EFGH",
+    "expiresAt": "2026-11-20T10:15:00Z"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "episodes": [
+    {
+      "id": "v9",
+      "title": "他的另一个视频",
+      "stage": "1",
+      "isFeature": true,
+      "isPaid": false,
+      "duration": 300,
+      "views": 1000
+    }
+  ],
+  "ranges": [
+    {
+      "title": "1-30",
+      "cursor": "uploads:1"
+    }
+  ]
+}

@@ -1,0 +1,2252 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "AccountManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "loggedIn": {
+          "type": "boolean"
+        },
+        "login": {
+          "description": "按优先级排列；空数组表示这个源不需要登录。",
+          "items": {
+            "$ref": "#/definitions/LoginMethod"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "$ref": "#/definitions/Profile"
+        },
+        "requiredFor": {
+          "enum": [
+            "nothing",
+            "play",
+            "browse"
+          ],
+          "type": "string"
+        },
+        "webLogin": {
+          "$ref": "#/definitions/WebLogin"
+        }
+      },
+      "required": [
+        "login",
+        "requiredFor",
+        "loggedIn"
+      ],
+      "type": "object"
+    },
+    "AccountState": {
+      "additionalProperties": false,
+      "properties": {
+        "loggedIn": {
+          "type": "boolean"
+        },
+        "profile": {
+          "$ref": "#/definitions/Profile"
+        }
+      },
+      "required": [
+        "loggedIn"
+      ],
+      "type": "object"
+    },
+    "ActionFeatures": {
+      "additionalProperties": false,
+      "properties": {
+        "coins": {
+          "type": "boolean"
+        },
+        "dislike": {
+          "type": "boolean"
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "follow": {
+          "type": "boolean"
+        },
+        "like": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "like",
+        "dislike",
+        "coins",
+        "favorite",
+        "follow"
+      ],
+      "type": "object"
+    },
+    "AudioLanguage": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "name"
+      ],
+      "type": "object"
+    },
+    "Badge": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "enum": [
+            "red",
+            "gold",
+            "blue",
+            "neutral"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "tone"
+      ],
+      "type": "object"
+    },
+    "Brand": {
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "$ref": "#/definitions/URLString",
+          "description": "彩色 logo，PNG，正方形，≥ 256 px。"
+        },
+        "tabIcon": {
+          "$ref": "#/definitions/URLString",
+          "description": "首页 tab 图标，透明底单色 PNG，按模板图渲染。"
+        },
+        "tabIconIsWordmark": {
+          "type": "boolean"
+        },
+        "tint": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Channel": {
+      "additionalProperties": false,
+      "properties": {
+        "filterCategories": {
+          "items": {
+            "$ref": "#/definitions/FilterCategory"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "subchannels": {
+          "items": {
+            "$ref": "#/definitions/Channel"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "Channels": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/definitions/Channel"
+          },
+          "type": "array"
+        },
+        "home": {
+          "$ref": "#/definitions/Channel"
+        },
+        "library": {
+          "items": {
+            "$ref": "#/definitions/Shelf"
+          },
+          "type": "array"
+        },
+        "pinned": {
+          "items": {
+            "$ref": "#/definitions/Channel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "home",
+        "pinned",
+        "channels",
+        "library"
+      ],
+      "type": "object"
+    },
+    "Chapter": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "type": "number"
+        },
+        "imageURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "start": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "title"
+      ],
+      "type": "object"
+    },
+    "Comment": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "$ref": "#/definitions/CommentAuthor"
+        },
+        "date": {
+          "$ref": "#/definitions/DateString"
+        },
+        "emotes": {
+          "additionalProperties": {
+            "$ref": "#/definitions/URLString"
+          },
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "likes": {
+          "type": "number"
+        },
+        "location": {
+          "type": "string"
+        },
+        "pictures": {
+          "items": {
+            "$ref": "#/definitions/URLString"
+          },
+          "type": "array"
+        },
+        "previewReplies": {
+          "items": {
+            "$ref": "#/definitions/Comment"
+          },
+          "type": "array"
+        },
+        "replies": {
+          "$ref": "#/definitions/Cursor"
+        },
+        "repliesTo": {
+          "type": "string"
+        },
+        "replyCount": {
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "text",
+        "likes"
+      ],
+      "type": "object"
+    },
+    "CommentAuthor": {
+      "additionalProperties": false,
+      "properties": {
+        "avatarURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameColor": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CommentPage": {
+      "additionalProperties": false,
+      "properties": {
+        "comments": {
+          "items": {
+            "$ref": "#/definitions/Comment"
+          },
+          "type": "array"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "comments"
+      ],
+      "type": "object"
+    },
+    "CommentSort": {
+      "enum": [
+        "hot",
+        "latest"
+      ],
+      "type": "string"
+    },
+    "CookieInput": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "type": "string"
+        },
+        "expires": {
+          "$ref": "#/definitions/DateString"
+        },
+        "httpOnly": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "secure": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "domain"
+      ],
+      "type": "object"
+    },
+    "CookieLoginResult": {
+      "additionalProperties": false,
+      "description": "`login/cookie` 的响应。",
+      "properties": {
+        "step": {
+          "$ref": "#/definitions/LoginStep"
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "type": "object"
+    },
+    "Credit": {
+      "additionalProperties": false,
+      "properties": {
+        "avatarURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "Cue": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "type": "number"
+        },
+        "start": {
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        },
+        "words": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "text"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "text"
+      ],
+      "type": "object"
+    },
+    "CueList": {
+      "additionalProperties": false,
+      "description": "`subtitles/{ref}/{key}` 的响应。",
+      "properties": {
+        "cues": {
+          "items": {
+            "$ref": "#/definitions/Cue"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cues"
+      ],
+      "type": "object"
+    },
+    "Cursor": {
+      "type": "string"
+    },
+    "Danmaku": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "position": {
+          "enum": [
+            "scroll",
+            "top",
+            "bottom"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "time": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "time",
+        "text",
+        "position",
+        "color"
+      ],
+      "type": "object"
+    },
+    "DateString": {
+      "type": "string"
+    },
+    "Episode": {
+      "additionalProperties": false,
+      "properties": {
+        "badge": {
+          "$ref": "#/definitions/Badge"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "imageURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "isFeature": {
+          "type": "boolean"
+        },
+        "isPaid": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "publishedAt": {
+          "$ref": "#/definitions/DateString"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "views": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "stage",
+        "isFeature",
+        "isPaid"
+      ],
+      "type": "object"
+    },
+    "EpisodeList": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "type": "string"
+        },
+        "episodes": {
+          "items": {
+            "$ref": "#/definitions/Episode"
+          },
+          "type": "array"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/definitions/ShowPart"
+          },
+          "type": "array"
+        },
+        "ranges": {
+          "items": {
+            "$ref": "#/definitions/EpisodeRange"
+          },
+          "type": "array"
+        },
+        "selectedRange": {
+          "$ref": "#/definitions/EpisodeRange"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "episodes"
+      ],
+      "type": "object"
+    },
+    "EpisodeRange": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "$ref": "#/definitions/Cursor"
+        },
+        "section": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "cursor"
+      ],
+      "type": "object"
+    },
+    "ErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "$ref": "#/definitions/ErrorCode"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "login_required",
+        "restricted",
+        "unplayable",
+        "not_found",
+        "throttled",
+        "upstream_changed",
+        "unavailable",
+        "bad_request",
+        "internal"
+      ],
+      "type": "string"
+    },
+    "FairPlayEndpoints": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate": {
+          "$ref": "#/definitions/URLString"
+        },
+        "license": {
+          "$ref": "#/definitions/URLString"
+        }
+      },
+      "required": [
+        "certificate",
+        "license"
+      ],
+      "type": "object"
+    },
+    "FavoriteFolder": {
+      "additionalProperties": false,
+      "properties": {
+        "containsVideo": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "containsVideo"
+      ],
+      "type": "object"
+    },
+    "Features": {
+      "additionalProperties": false,
+      "properties": {
+        "danmaku": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "segmentDuration": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "segmentDuration"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "additionalProperties": false,
+          "properties": {
+            "actions": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ActionFeatures"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "comments": {
+              "type": "boolean"
+            },
+            "uploader": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "comments",
+            "uploader",
+            "actions"
+          ],
+          "type": "object"
+        },
+        "fairPlay": {
+          "type": "boolean"
+        },
+        "feed": {
+          "additionalProperties": false,
+          "properties": {
+            "channelBrowser": {
+              "type": "boolean"
+            },
+            "homeShowsHistory": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "homeShowsHistory",
+            "channelBrowser"
+          ],
+          "type": "object"
+        },
+        "filter": {
+          "type": "boolean"
+        },
+        "history": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "delete": {
+                  "type": "boolean"
+                },
+                "read": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "read",
+                "delete"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "type": "boolean"
+        },
+        "search": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                },
+                "rankings": {
+                  "type": "boolean"
+                },
+                "suggestions": {
+                  "type": "boolean"
+                },
+                "videos": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "rankings",
+                "suggestions",
+                "videos"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subtitles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "feed",
+        "filter",
+        "search",
+        "detail",
+        "history",
+        "danmaku",
+        "subtitles",
+        "progress",
+        "fairPlay"
+      ],
+      "type": "object"
+    },
+    "FeedMore": {
+      "additionalProperties": false,
+      "properties": {
+        "route": {
+          "$ref": "#/definitions/Cursor"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "route"
+      ],
+      "type": "object"
+    },
+    "FeedPage": {
+      "additionalProperties": false,
+      "properties": {
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/definitions/FeedSection"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sections"
+      ],
+      "type": "object"
+    },
+    "FeedSection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "more": {
+          "$ref": "#/definitions/FeedMore"
+        },
+        "style": {
+          "$ref": "#/definitions/SectionStyle"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "style",
+        "items"
+      ],
+      "type": "object"
+    },
+    "FilterCategory": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "FilterDimension": {
+      "additionalProperties": false,
+      "properties": {
+        "defaultOptionID": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isSort": {
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/definitions/FilterOption"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "options",
+        "defaultOptionID"
+      ],
+      "type": "object"
+    },
+    "FilterOption": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "FilterSelection": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "HistoryPage": {
+      "additionalProperties": false,
+      "properties": {
+        "hasMore": {
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/definitions/VideoItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items",
+        "hasMore"
+      ],
+      "type": "object"
+    },
+    "LoginMethod": {
+      "enum": [
+        "qr",
+        "deviceCode",
+        "webCookie"
+      ],
+      "type": "string"
+    },
+    "LoginState": {
+      "additionalProperties": false,
+      "description": "`login/start` 与 `login/{id}` 的响应：`seq` 随每个新步骤递增，长轮询带 `after=<seq>` 等下一个。",
+      "properties": {
+        "loginId": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "number"
+        },
+        "step": {
+          "$ref": "#/definitions/LoginStep"
+        }
+      },
+      "required": [
+        "loginId",
+        "seq",
+        "step"
+      ],
+      "type": "object"
+    },
+    "LoginStep": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "$ref": "#/definitions/DateString"
+            },
+            "kind": {
+              "const": "showCode",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "openURL": {
+              "$ref": "#/definitions/URLString"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "content",
+            "title",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "waiting",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "completed",
+              "type": "string"
+            },
+            "profile": {
+              "$ref": "#/definitions/Profile"
+            }
+          },
+          "required": [
+            "kind",
+            "profile"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "failed",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "restartable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "message",
+            "restartable"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Manifest": {
+      "additionalProperties": false,
+      "properties": {
+        "minApp": {
+          "description": "低于这个版本的 App 应提示升级。",
+          "type": "string"
+        },
+        "protocol": {
+          "type": "number"
+        },
+        "server": {
+          "$ref": "#/definitions/ServerInfo"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/definitions/SourceManifest"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "protocol",
+        "server",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "Markers": {
+      "additionalProperties": false,
+      "properties": {
+        "chapters": {
+          "items": {
+            "$ref": "#/definitions/Chapter"
+          },
+          "type": "array"
+        },
+        "introEnd": {
+          "type": "number"
+        },
+        "outroStart": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "MediaItem": {
+      "additionalProperties": false,
+      "properties": {
+        "badge": {
+          "$ref": "#/definitions/Badge"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "landscapeURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "posterURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "publishedAt": {
+          "$ref": "#/definitions/DateString"
+        },
+        "rank": {
+          "type": "number"
+        },
+        "reservation": {
+          "$ref": "#/definitions/Reservation"
+        },
+        "stats": {
+          "$ref": "#/definitions/Stats"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/definitions/Target"
+        },
+        "title": {
+          "type": "string"
+        },
+        "uploader": {
+          "$ref": "#/definitions/Uploader"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "target"
+      ],
+      "type": "object"
+    },
+    "MediaItemPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "Membership": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "endsAt": {
+          "$ref": "#/definitions/DateString"
+        },
+        "tier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tier",
+        "active"
+      ],
+      "type": "object"
+    },
+    "PlaybackMedia": {
+      "additionalProperties": false,
+      "properties": {
+        "diagnostics": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "expiresAt": {
+          "$ref": "#/definitions/DateString"
+        },
+        "live": {
+          "type": "boolean"
+        },
+        "markers": {
+          "$ref": "#/definitions/Markers"
+        },
+        "reportContext": {},
+        "selectedStream": {
+          "type": "string"
+        },
+        "startPosition": {
+          "type": "number"
+        },
+        "streams": {
+          "items": {
+            "$ref": "#/definitions/Stream"
+          },
+          "type": "array"
+        },
+        "subtitles": {
+          "items": {
+            "$ref": "#/definitions/SubtitleTrack"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "streams",
+        "selectedStream"
+      ],
+      "type": "object"
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "avatarURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "membership": {
+          "$ref": "#/definitions/Membership"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ProgressEvent": {
+      "enum": [
+        "start",
+        "progress",
+        "seek",
+        "leave",
+        "end"
+      ],
+      "type": "string"
+    },
+    "ProgressRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "event": {
+          "$ref": "#/definitions/ProgressEvent"
+        },
+        "position": {
+          "type": "number"
+        },
+        "reportContext": {},
+        "show": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "video": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "video",
+        "position"
+      ],
+      "type": "object"
+    },
+    "Quality": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "rank": {
+          "description": "像素高度：720、1080、2160。",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rank",
+        "label"
+      ],
+      "type": "object"
+    },
+    "Rating": {
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "platform",
+            "douban",
+            "unknown"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "score"
+      ],
+      "type": "object"
+    },
+    "RecommendationTab": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "$ref": "#/definitions/Cursor"
+        },
+        "imageURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "Recommendations": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "tabs": {
+          "items": {
+            "$ref": "#/definitions/RecommendationTab"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tabs",
+        "items"
+      ],
+      "type": "object"
+    },
+    "Reservation": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isReserved": {
+          "type": "boolean"
+        },
+        "onlineText": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "isReserved"
+      ],
+      "type": "object"
+    },
+    "ResolveRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "preferences": {
+          "additionalProperties": false,
+          "properties": {
+            "adaptive": {
+              "type": "boolean"
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "maxQualityRank": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "show": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "video": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "video"
+      ],
+      "type": "object"
+    },
+    "ResumePoint": {
+      "additionalProperties": false,
+      "properties": {
+        "progress": {
+          "type": "number"
+        },
+        "videoID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "videoID"
+      ],
+      "type": "object"
+    },
+    "SearchRanking": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "items"
+      ],
+      "type": "object"
+    },
+    "SearchResults": {
+      "additionalProperties": false,
+      "properties": {
+        "moreVideos": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shows": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "topMatch": {
+          "$ref": "#/definitions/SearchTopMatch"
+        },
+        "videos": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "shows",
+        "videos"
+      ],
+      "type": "object"
+    },
+    "SearchSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyword"
+      ],
+      "type": "object"
+    },
+    "SearchTopMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "cast": {
+          "type": "string"
+        },
+        "episodes": {
+          "items": {
+            "$ref": "#/definitions/VideoItem"
+          },
+          "type": "array"
+        },
+        "facts": {
+          "type": "string"
+        },
+        "show": {
+          "$ref": "#/definitions/MediaItem"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "show",
+        "episodes"
+      ],
+      "type": "object"
+    },
+    "SectionStyle": {
+      "enum": [
+        "hero",
+        "row",
+        "ranking",
+        "continueWatching",
+        "upcoming",
+        "shortVideo",
+        "grid"
+      ],
+      "type": "string"
+    },
+    "ServerInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "依赖组件的版本，如 { \"yt-dlp\": \"2026.11.10\" }。",
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "software": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "software"
+      ],
+      "type": "object"
+    },
+    "Shelf": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "$ref": "#/definitions/Channel"
+        },
+        "content": {
+          "enum": [
+            "feed",
+            "subchannels",
+            "uploaders"
+          ],
+          "type": "string"
+        },
+        "systemImage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "systemImage",
+        "content"
+      ],
+      "type": "object"
+    },
+    "ShowDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "type": "string"
+        },
+        "badge": {
+          "$ref": "#/definitions/Badge"
+        },
+        "category": {
+          "type": "string"
+        },
+        "coUploaders": {
+          "items": {
+            "$ref": "#/definitions/Uploader"
+          },
+          "type": "array"
+        },
+        "credits": {
+          "items": {
+            "$ref": "#/definitions/Credit"
+          },
+          "type": "array"
+        },
+        "defaultVideoID": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "episodes": {
+          "$ref": "#/definitions/EpisodeList"
+        },
+        "heat": {
+          "type": "number"
+        },
+        "isPaid": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "standalone",
+            "series"
+          ],
+          "type": "string"
+        },
+        "landscapeURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "posterURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "publishedAt": {
+          "$ref": "#/definitions/DateString"
+        },
+        "ratings": {
+          "items": {
+            "$ref": "#/definitions/Rating"
+          },
+          "type": "array"
+        },
+        "recommendations": {
+          "$ref": "#/definitions/Recommendations"
+        },
+        "resume": {
+          "$ref": "#/definitions/ResumePoint"
+        },
+        "series": {
+          "items": {
+            "$ref": "#/definitions/MediaItem"
+          },
+          "type": "array"
+        },
+        "shortSummary": {
+          "type": "string"
+        },
+        "showID": {
+          "type": "string"
+        },
+        "stats": {
+          "$ref": "#/definitions/Stats"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tagline": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updateInfo": {
+          "type": "string"
+        },
+        "uploader": {
+          "$ref": "#/definitions/Uploader"
+        },
+        "uploads": {
+          "$ref": "#/definitions/EpisodeList"
+        }
+      },
+      "required": [
+        "title",
+        "ratings",
+        "tags",
+        "isPaid",
+        "credits",
+        "series",
+        "recommendations"
+      ],
+      "type": "object"
+    },
+    "ShowPart": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "isCurrent": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "isCurrent"
+      ],
+      "type": "object"
+    },
+    "SourceManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "$ref": "#/definitions/AccountManifest"
+        },
+        "brand": {
+          "$ref": "#/definitions/Brand"
+        },
+        "features": {
+          "$ref": "#/definitions/Features"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "additionalProperties": false,
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/definitions/SourceState"
+            }
+          },
+          "required": [
+            "state"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "brand",
+        "status",
+        "account",
+        "features"
+      ],
+      "type": "object"
+    },
+    "SourceState": {
+      "enum": [
+        "ready",
+        "starting",
+        "degraded",
+        "broken"
+      ],
+      "type": "string"
+    },
+    "Stats": {
+      "additionalProperties": false,
+      "properties": {
+        "coins": {
+          "type": "number"
+        },
+        "danmaku": {
+          "type": "number"
+        },
+        "favorites": {
+          "type": "number"
+        },
+        "likes": {
+          "type": "number"
+        },
+        "replies": {
+          "type": "number"
+        },
+        "views": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "Stream": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "fairPlay": {
+          "$ref": "#/definitions/FairPlayEndpoints"
+        },
+        "fallback": {
+          "$ref": "#/definitions/Variant"
+        },
+        "format": {
+          "enum": [
+            "hls",
+            "mp4"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "language": {
+          "$ref": "#/definitions/AudioLanguage"
+        },
+        "lowerVariants": {
+          "items": {
+            "$ref": "#/definitions/Variant"
+          },
+          "type": "array"
+        },
+        "quality": {
+          "$ref": "#/definitions/Quality"
+        },
+        "unavailableReason": {
+          "type": "string"
+        },
+        "url": {
+          "$ref": "#/definitions/URLString"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "format",
+        "quality",
+        "description"
+      ],
+      "type": "object"
+    },
+    "SubtitleTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "cues": {
+          "$ref": "#/definitions/URLString",
+          "description": "逐句原文（`{ cues }`），用于 App 本地翻译。"
+        },
+        "generated": {
+          "type": "boolean"
+        },
+        "key": {
+          "description": "语言，语音识别加 `.asr`（\"en\"、\"en.asr\"）。",
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "vtt": {
+          "$ref": "#/definitions/URLString"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "language",
+        "generated"
+      ],
+      "type": "object"
+    },
+    "Target": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "show": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "show"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "video": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "video"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "URLString": {
+      "type": "string"
+    },
+    "Uploader": {
+      "additionalProperties": false,
+      "properties": {
+        "avatarURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "followers": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "UploaderPage": {
+      "additionalProperties": false,
+      "properties": {
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Cursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "uploaders": {
+          "items": {
+            "$ref": "#/definitions/UploaderProfile"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "uploaders"
+      ],
+      "type": "object"
+    },
+    "UploaderProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "followingCount": {
+          "type": "number"
+        },
+        "isFollowing": {
+          "type": "boolean"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "uploader": {
+          "$ref": "#/definitions/Uploader"
+        },
+        "videoCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "uploader"
+      ],
+      "type": "object"
+    },
+    "Variant": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "peakBandwidths": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "peakBandwidths",
+        "label"
+      ],
+      "type": "object"
+    },
+    "VideoActionState": {
+      "additionalProperties": false,
+      "properties": {
+        "coins": {
+          "type": "number"
+        },
+        "coinsPerDay": {
+          "type": "number"
+        },
+        "coinsToday": {
+          "type": "number"
+        },
+        "isDisliked": {
+          "type": "boolean"
+        },
+        "isFavorited": {
+          "type": "boolean"
+        },
+        "isFollowingUploader": {
+          "type": "boolean"
+        },
+        "isLiked": {
+          "type": "boolean"
+        },
+        "maxCoins": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "isLiked",
+        "coins",
+        "maxCoins",
+        "coinsPerDay"
+      ],
+      "type": "object"
+    },
+    "VideoItem": {
+      "additionalProperties": false,
+      "properties": {
+        "badge": {
+          "$ref": "#/definitions/Badge"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "coverURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "device": {
+          "$ref": "#/definitions/WatchDevice"
+        },
+        "historyKey": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isPlayable": {
+          "type": "boolean"
+        },
+        "lastWatched": {
+          "$ref": "#/definitions/DateString"
+        },
+        "posterURL": {
+          "$ref": "#/definitions/URLString"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "showID": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "unplayableReason": {
+          "type": "string"
+        },
+        "watchedPercent": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "WatchDevice": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "tv",
+            "computer",
+            "phone",
+            "tablet",
+            "other"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "type": "object"
+    },
+    "WebLogin": {
+      "additionalProperties": false,
+      "properties": {
+        "doneWhen": {
+          "additionalProperties": false,
+          "properties": {
+            "cookie": {
+              "type": "string"
+            },
+            "domain": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cookie",
+            "domain"
+          ],
+          "type": "object"
+        },
+        "url": {
+          "$ref": "#/definitions/URLString"
+        },
+        "userAgent": {
+          "enum": [
+            "mobile",
+            "desktop"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "doneWhen"
+      ],
+      "type": "object"
+    }
+  }
+}

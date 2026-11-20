@@ -1,0 +1,86 @@
+{
+  "protocol": 1,
+  "server": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "示例服务",
+    "version": "0.0.0-fixture",
+    "software": "iyt-source-server",
+    "components": {
+      "yt-dlp": "2026.11.10"
+    }
+  },
+  "sources": [
+    {
+      "id": "sample",
+      "name": "示例平台",
+      "brand": {
+        "logo": "https://img.example.com/logo.png",
+        "tabIcon": "https://img.example.com/tab.png",
+        "tabIconIsWordmark": false,
+        "tint": "#FF1040"
+      },
+      "status": {
+        "state": "ready"
+      },
+      "account": {
+        "login": [
+          "deviceCode",
+          "webCookie"
+        ],
+        "requiredFor": "play",
+        "loggedIn": true,
+        "profile": {
+          "name": "Alice",
+          "avatarURL": "https://img.example.com/alice.jpg",
+          "membership": {
+            "tier": "大会员",
+            "active": true,
+            "endsAt": "2027-01-01T00:00:00Z"
+          }
+        },
+        "webLogin": {
+          "url": "https://example.com/login",
+          "doneWhen": {
+            "cookie": "SESSION",
+            "domain": ".example.com"
+          },
+          "userAgent": "mobile"
+        }
+      },
+      "features": {
+        "feed": {
+          "homeShowsHistory": true,
+          "channelBrowser": true
+        },
+        "filter": true,
+        "search": {
+          "rankings": true,
+          "suggestions": true,
+          "videos": true,
+          "prompt": "搜索示例平台"
+        },
+        "detail": {
+          "comments": true,
+          "uploader": true,
+          "actions": {
+            "like": true,
+            "dislike": true,
+            "coins": true,
+            "favorite": true,
+            "follow": true
+          }
+        },
+        "history": {
+          "read": true,
+          "delete": true
+        },
+        "danmaku": {
+          "segmentDuration": 60
+        },
+        "subtitles": true,
+        "progress": true,
+        "fairPlay": false
+      }
+    }
+  ]
+}

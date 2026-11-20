@@ -1,0 +1,366 @@
+[
+  {
+    "name": "manifest",
+    "method": "GET",
+    "path": "/iyt/v1/manifest",
+    "type": "Manifest",
+    "status": 200
+  },
+  {
+    "name": "account",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/account",
+    "type": "AccountState",
+    "status": 200
+  },
+  {
+    "name": "login-start",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/login/start",
+    "body": {
+      "method": "deviceCode"
+    },
+    "type": "LoginState",
+    "status": 200
+  },
+  {
+    "name": "login-poll-code",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/login/{loginId}?after=0&wait=1",
+    "type": "LoginState",
+    "status": 200
+  },
+  {
+    "name": "login-poll-waiting",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/login/{loginId}?after=1&wait=1",
+    "type": "LoginState",
+    "status": 200
+  },
+  {
+    "name": "login-poll-completed",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/login/{loginId}?after=2&wait=2",
+    "type": "LoginState",
+    "status": 200
+  },
+  {
+    "name": "manifest-logged-in",
+    "method": "GET",
+    "path": "/iyt/v1/manifest",
+    "type": "Manifest",
+    "status": 200
+  },
+  {
+    "name": "login-cookie",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/login/cookie",
+    "body": {
+      "cookies": [
+        {
+          "name": "SESSION",
+          "value": "x",
+          "domain": ".example.com"
+        }
+      ],
+      "userAgent": "Mozilla/5.0"
+    },
+    "type": "CookieLoginResult",
+    "status": 200
+  },
+  {
+    "name": "login-cookie-failed",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/login/cookie",
+    "body": {
+      "cookies": [
+        {
+          "name": "OTHER",
+          "value": "x",
+          "domain": ".example.com"
+        }
+      ]
+    },
+    "type": "CookieLoginResult",
+    "status": 200
+  },
+  {
+    "name": "feed-channels",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/channels",
+    "type": "Channels",
+    "status": 200
+  },
+  {
+    "name": "feed-channel",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/channel?id=home",
+    "type": "FeedPage",
+    "status": 200
+  },
+  {
+    "name": "feed-channel-page2",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/channel?id=home&cursor=p2",
+    "type": "FeedPage",
+    "status": 200
+  },
+  {
+    "name": "feed-more",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/more?route=more%3Ahot",
+    "type": "MediaItemPage",
+    "status": 200
+  },
+  {
+    "name": "feed-subchannels",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/subchannels?id=favorites",
+    "type": "Channel[]",
+    "status": 200
+  },
+  {
+    "name": "feed-uploaders",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/feed/uploaders?id=following",
+    "type": "UploaderPage",
+    "status": 200
+  },
+  {
+    "name": "filter-categories",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/filter/categories",
+    "type": "FilterCategory[]",
+    "status": 200
+  },
+  {
+    "name": "filter-dimensions",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/filter/dimensions?category=tv",
+    "type": "FilterDimension[]",
+    "status": 200
+  },
+  {
+    "name": "filter-results",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/filter/results?category=tv&selection=%7B%22area%22%3A%22cn%22%7D",
+    "type": "MediaItemPage",
+    "status": 200
+  },
+  {
+    "name": "search-rankings",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/search/rankings",
+    "type": "SearchRanking[]",
+    "status": 200
+  },
+  {
+    "name": "search-suggestions",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/search/suggestions?q=shi",
+    "type": "SearchSuggestion[]",
+    "status": 200
+  },
+  {
+    "name": "search",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/search?q=%E7%A4%BA%E4%BE%8B",
+    "type": "SearchResults",
+    "status": 200
+  },
+  {
+    "name": "search-videos",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/search/videos?q=x&cursor=v2",
+    "type": "MediaItemPage",
+    "status": 200
+  },
+  {
+    "name": "detail-series",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail?target=show%3As1",
+    "type": "ShowDetail",
+    "status": 200
+  },
+  {
+    "name": "detail-standalone",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail?target=video%3Av1",
+    "type": "ShowDetail",
+    "status": 200
+  },
+  {
+    "name": "detail-episodes",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail/episodes?cursor=eps%3A31",
+    "type": "EpisodeList",
+    "status": 200
+  },
+  {
+    "name": "detail-recommendations",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail/recommendations?cursor=rec%3Ac2",
+    "type": "MediaItem[]",
+    "status": 200
+  },
+  {
+    "name": "detail-resume",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail/resume?show=s1",
+    "type": "ResumePoint",
+    "status": 200
+  },
+  {
+    "name": "uploader",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/uploader?id=u1",
+    "type": "UploaderProfile",
+    "status": 200
+  },
+  {
+    "name": "uploader-videos",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/uploader/videos?id=u1",
+    "type": "EpisodeList",
+    "status": 200
+  },
+  {
+    "name": "uploader-collections",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/uploader/collections?id=u1",
+    "type": "EpisodeRange[]",
+    "status": 200
+  },
+  {
+    "name": "actions-state",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/actions/state?video=v1&uploader=u1",
+    "type": "VideoActionState",
+    "status": 200
+  },
+  {
+    "name": "actions-like",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/actions/like",
+    "body": {
+      "video": "v1",
+      "value": true
+    },
+    "status": 204
+  },
+  {
+    "name": "actions-favorites",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/actions/favorites?video=v1",
+    "type": "FavoriteFolder[]",
+    "status": 200
+  },
+  {
+    "name": "comments",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/comments?video=e3&sort=hot",
+    "type": "CommentPage",
+    "status": 200
+  },
+  {
+    "name": "comments-page",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/comments/page?cursor=comments%3A2",
+    "type": "CommentPage",
+    "status": 200
+  },
+  {
+    "name": "danmaku",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/danmaku?video=e3&segment=2",
+    "type": "Danmaku[]",
+    "status": 200
+  },
+  {
+    "name": "history",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/history?page=1",
+    "type": "HistoryPage",
+    "status": 200
+  },
+  {
+    "name": "history-delete",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/history/delete",
+    "body": {
+      "keys": [
+        "h-e3"
+      ]
+    },
+    "status": 204
+  },
+  {
+    "name": "playback-resolve",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/playback/resolve",
+    "body": {
+      "video": "e3",
+      "show": "s1",
+      "preferences": {
+        "maxQualityRank": 1080,
+        "language": null,
+        "adaptive": false
+      }
+    },
+    "type": "PlaybackMedia",
+    "status": 200
+  },
+  {
+    "name": "playback-progress",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/playback/progress",
+    "body": {
+      "event": "progress",
+      "video": "e3",
+      "show": "s1",
+      "position": 330.2,
+      "duration": 1500,
+      "reportContext": {
+        "show": "s1",
+        "episode": "e3",
+        "session": 42
+      }
+    },
+    "status": 204
+  },
+  {
+    "name": "subtitles-cues",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/subtitles/e3/en.asr",
+    "type": "CueList",
+    "status": 200
+  },
+  {
+    "name": "account-logout",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/account/logout",
+    "body": {},
+    "status": 204
+  },
+  {
+    "name": "error-not-found",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/nothing",
+    "type": "ErrorBody",
+    "status": 404
+  },
+  {
+    "name": "error-bad-request",
+    "method": "GET",
+    "path": "/iyt/v1/sources/sample/detail?target=oops",
+    "type": "ErrorBody",
+    "status": 400
+  },
+  {
+    "name": "error-missing-source",
+    "method": "GET",
+    "path": "/iyt/v1/sources/missing/feed/channels",
+    "type": "ErrorBody",
+    "status": 404
+  }
+]

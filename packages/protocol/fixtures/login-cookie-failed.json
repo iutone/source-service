@@ -1,0 +1,7 @@
+{
+  "step": {
+    "kind": "failed",
+    "message": "缺少登录 cookie",
+    "restartable": true
+  }
+}

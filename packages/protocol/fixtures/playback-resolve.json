@@ -1,0 +1,109 @@
+{
+  "title": "示例剧 第3集",
+  "startPosition": 312.5,
+  "expiresAt": "2026-11-20T14:00:00Z",
+  "live": false,
+  "markers": {
+    "introEnd": 85,
+    "outroStart": 1290,
+    "chapters": [
+      {
+        "start": 0,
+        "end": 60,
+        "title": "开场",
+        "imageURL": "https://img.example.com/ch1.jpg"
+      },
+      {
+        "start": 60,
+        "title": "正片"
+      }
+    ]
+  },
+  "streams": [
+    {
+      "id": "1080-zh",
+      "url": "https://cdn.example.com/e3/1080/master.m3u8",
+      "format": "hls",
+      "quality": {
+        "rank": 1080,
+        "label": "1080P"
+      },
+      "language": {
+        "code": "zh",
+        "name": "普通话"
+      },
+      "description": "avc1 1080p direct",
+      "lowerVariants": [
+        {
+          "peakBandwidths": [
+            2400000
+          ],
+          "label": "720P"
+        }
+      ]
+    },
+    {
+      "id": "2160-zh",
+      "url": "/iyt/v1/media/TOKEN/master.m3u8",
+      "format": "hls",
+      "quality": {
+        "rank": 2160,
+        "label": "4K"
+      },
+      "language": {
+        "code": "zh",
+        "name": "普通话"
+      },
+      "description": "hvc1 2160p proxy",
+      "unavailableReason": "需要会员",
+      "fallback": {
+        "peakBandwidths": [
+          12000000,
+          12500000
+        ],
+        "label": "SDR"
+      }
+    },
+    {
+      "id": "720-yue",
+      "url": "https://cdn.example.com/e3/720-yue.mp4",
+      "format": "mp4",
+      "quality": {
+        "rank": 720,
+        "label": "720P"
+      },
+      "language": {
+        "code": "yue",
+        "name": "粤语"
+      },
+      "description": "avc1 720p mp4"
+    }
+  ],
+  "selectedStream": "1080-zh",
+  "subtitles": [
+    {
+      "key": "zh",
+      "name": "中文",
+      "language": "zh",
+      "generated": false,
+      "vtt": "/iyt/v1/media/TOKEN/zh.vtt",
+      "cues": "/iyt/v1/sources/sample/subtitles/e3/zh"
+    },
+    {
+      "key": "en.asr",
+      "name": "英语（自动生成）",
+      "language": "en",
+      "generated": true,
+      "cues": "/iyt/v1/sources/sample/subtitles/e3/en.asr"
+    }
+  ],
+  "reportContext": {
+    "show": "s1",
+    "episode": "e3",
+    "session": 42
+  },
+  "diagnostics": {
+    "client": "sample",
+    "path": "direct"
+  }
+}

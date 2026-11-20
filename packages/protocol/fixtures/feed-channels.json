@@ -1,0 +1,64 @@
+{
+  "home": {
+    "id": "home",
+    "title": "首页"
+  },
+  "pinned": [
+    {
+      "id": "tv",
+      "title": "电视剧"
+    }
+  ],
+  "channels": [
+    {
+      "id": "tv",
+      "title": "电视剧",
+      "filterCategories": [
+        {
+          "id": "tv",
+          "title": "电视剧"
+        }
+      ]
+    },
+    {
+      "id": "rank",
+      "title": "排行榜",
+      "subchannels": [
+        {
+          "id": "rank-all",
+          "title": "全站"
+        },
+        {
+          "id": "rank-anime",
+          "title": "动画"
+        }
+      ]
+    }
+  ],
+  "library": [
+    {
+      "channel": {
+        "id": "later",
+        "title": "稍后观看"
+      },
+      "systemImage": "clock",
+      "content": "feed"
+    },
+    {
+      "channel": {
+        "id": "favorites",
+        "title": "收藏"
+      },
+      "systemImage": "star",
+      "content": "subchannels"
+    },
+    {
+      "channel": {
+        "id": "following",
+        "title": "关注"
+      },
+      "systemImage": "person.2",
+      "content": "uploaders"
+    }
+  ]
+}

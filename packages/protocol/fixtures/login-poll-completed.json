@@ -1,0 +1,11 @@
+{
+  "loginId": "LOGIN_ID",
+  "seq": 3,
+  "step": {
+    "kind": "completed",
+    "profile": {
+      "name": "Alice",
+      "avatarURL": "https://img.example.com/alice.jpg"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "bad_request",
+    "message": "target 应为 show:<id> 或 video:<id>",
+    "retryable": false
+  }
+}

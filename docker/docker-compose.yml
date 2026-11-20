@@ -1,0 +1,12 @@
+# host 网络：Bonjour（mDNS）广播才出得去，App 才能自动发现。
+services:
+  iyt-source:
+    image: iyt-source-server:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    network_mode: host
+    volumes:
+      - ./data:/data                      # config.yaml、登录态、进度、插件
+      - /volume1/video:/media/videos:ro   # 换成 NAS 上的视频目录
+    restart: unless-stopped

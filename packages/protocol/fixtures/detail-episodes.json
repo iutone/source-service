@@ -1,0 +1,47 @@
+{
+  "episodes": [
+    {
+      "id": "e31",
+      "title": "第31集",
+      "stage": "31",
+      "isFeature": true,
+      "kind": "正片",
+      "imageURL": "https://img.example.com/e31.jpg",
+      "isPaid": true,
+      "badge": {
+        "text": "VIP",
+        "tone": "gold"
+      }
+    },
+    {
+      "id": "e32",
+      "title": "第32集",
+      "stage": "32",
+      "isFeature": true,
+      "kind": "正片",
+      "imageURL": "https://img.example.com/e32.jpg",
+      "isPaid": true,
+      "badge": {
+        "text": "VIP",
+        "tone": "gold"
+      }
+    }
+  ],
+  "ranges": [
+    {
+      "title": "1-30",
+      "section": "正片",
+      "cursor": "eps:1"
+    },
+    {
+      "title": "31-40",
+      "section": "正片",
+      "cursor": "eps:31"
+    }
+  ],
+  "selectedRange": {
+    "title": "31-40",
+    "section": "正片",
+    "cursor": "eps:31"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "id": "c3",
+      "author": {
+        "name": "观众甲",
+        "avatarURL": "https://img.example.com/a1.jpg",
+        "nameColor": "#FB7299",
+        "role": "UP主"
+      },
+      "text": "下一页的评论",
+      "emotes": {
+        "[doge]": "https://img.example.com/doge.jpg"
+      },
+      "date": "2026-11-20T09:00:00Z",
+      "location": "广东",
+      "likes": 321
+    }
+  ],
+  "next": null
+}

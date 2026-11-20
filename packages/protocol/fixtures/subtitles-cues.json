@@ -1,0 +1,19 @@
+{
+  "cues": [
+    {
+      "start": 1,
+      "end": 2.4,
+      "text": "hello world",
+      "words": [
+        {
+          "start": 1,
+          "text": "hello"
+        },
+        {
+          "start": 1.6,
+          "text": "world"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "s4",
+    "title": "某演员的另一部剧",
+    "posterURL": "https://img.example.com/s4-poster.jpg",
+    "landscapeURL": "https://img.example.com/s4-wide.jpg",
+    "caption": "24集全",
+    "target": {
+      "show": "s4"
+    }
+  }
+]

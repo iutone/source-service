@@ -1,0 +1,156 @@
+{
+  "sections": [
+    {
+      "id": "banner",
+      "style": "hero",
+      "items": [
+        {
+          "id": "s1",
+          "title": "示例剧",
+          "posterURL": "https://img.example.com/s1-poster.jpg",
+          "landscapeURL": "https://img.example.com/s1-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s1"
+          },
+          "badge": {
+            "text": "独播",
+            "tone": "red"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot",
+      "title": "热播",
+      "style": "row",
+      "items": [
+        {
+          "id": "s1",
+          "title": "示例剧",
+          "posterURL": "https://img.example.com/s1-poster.jpg",
+          "landscapeURL": "https://img.example.com/s1-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s1"
+          }
+        },
+        {
+          "id": "s2",
+          "title": "另一部剧",
+          "posterURL": "https://img.example.com/s2-poster.jpg",
+          "landscapeURL": "https://img.example.com/s2-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s2"
+          },
+          "reservation": {
+            "id": "r1",
+            "onlineText": "即将上线",
+            "count": 1200,
+            "isReserved": false
+          }
+        }
+      ],
+      "more": {
+        "title": "全部热播",
+        "route": "more:hot"
+      }
+    },
+    {
+      "id": "top",
+      "title": "排行",
+      "style": "ranking",
+      "items": [
+        {
+          "id": "s1",
+          "title": "示例剧",
+          "posterURL": "https://img.example.com/s1-poster.jpg",
+          "landscapeURL": "https://img.example.com/s1-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s1"
+          },
+          "rank": 1
+        },
+        {
+          "id": "s2",
+          "title": "另一部剧",
+          "posterURL": "https://img.example.com/s2-poster.jpg",
+          "landscapeURL": "https://img.example.com/s2-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s2"
+          },
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "id": "continue",
+      "title": "继续观看",
+      "style": "continueWatching",
+      "items": [
+        {
+          "id": "s1",
+          "title": "示例剧",
+          "posterURL": "https://img.example.com/s1-poster.jpg",
+          "landscapeURL": "https://img.example.com/s1-wide.jpg",
+          "caption": "24集全",
+          "target": {
+            "show": "s1"
+          },
+          "progress": 0.42
+        }
+      ]
+    },
+    {
+      "id": "feed",
+      "title": "推荐",
+      "style": "grid",
+      "items": [
+        {
+          "id": "v1",
+          "title": "一个视频",
+          "landscapeURL": "https://img.example.com/v1.jpg",
+          "uploader": {
+            "id": "u1",
+            "name": "某 UP 主",
+            "avatarURL": "https://img.example.com/u1.jpg"
+          },
+          "stats": {
+            "views": 12345,
+            "danmaku": 67,
+            "likes": 890
+          },
+          "duration": 754,
+          "publishedAt": "2026-11-19T08:00:00Z",
+          "target": {
+            "video": "v1"
+          }
+        },
+        {
+          "id": "v2",
+          "title": "另一个视频",
+          "landscapeURL": "https://img.example.com/v2.jpg",
+          "uploader": {
+            "id": "u1",
+            "name": "某 UP 主",
+            "avatarURL": "https://img.example.com/u1.jpg"
+          },
+          "stats": {
+            "views": 12345,
+            "danmaku": 67,
+            "likes": 890
+          },
+          "duration": 754,
+          "publishedAt": "2026-11-19T08:00:00Z",
+          "target": {
+            "video": "v2"
+          }
+        }
+      ]
+    }
+  ],
+  "next": "p2"
+}

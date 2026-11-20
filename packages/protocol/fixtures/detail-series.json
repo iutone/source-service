@@ -1,0 +1,137 @@
+{
+  "showID": "s1",
+  "kind": "series",
+  "title": "示例剧",
+  "tagline": "一句话介绍",
+  "shortSummary": "一两句话。",
+  "summary": "完整的剧情简介。",
+  "attributes": "中国 · 2026 · 爱情",
+  "category": "电视剧",
+  "posterURL": "https://img.example.com/s1-poster.jpg",
+  "landscapeURL": "https://img.example.com/s1-wide.jpg",
+  "badge": {
+    "text": "独播",
+    "tone": "red"
+  },
+  "updateInfo": "24集全",
+  "heat": 9800,
+  "ratings": [
+    {
+      "source": "platform",
+      "score": "9.1"
+    },
+    {
+      "source": "douban",
+      "score": "8.5"
+    }
+  ],
+  "tags": [
+    "都市",
+    "爱情"
+  ],
+  "isPaid": true,
+  "credits": [
+    {
+      "id": "c1",
+      "name": "某导演",
+      "role": "导演",
+      "avatarURL": "https://img.example.com/c1.jpg"
+    },
+    {
+      "id": "c2",
+      "name": "某演员",
+      "role": "饰主角"
+    }
+  ],
+  "defaultVideoID": "e3",
+  "episodes": {
+    "episodes": [
+      {
+        "id": "e1",
+        "title": "第1集",
+        "stage": "1",
+        "isFeature": true,
+        "kind": "正片",
+        "imageURL": "https://img.example.com/e1.jpg",
+        "isPaid": false
+      },
+      {
+        "id": "e2",
+        "title": "第2集",
+        "stage": "2",
+        "isFeature": true,
+        "kind": "正片",
+        "imageURL": "https://img.example.com/e2.jpg",
+        "isPaid": false
+      },
+      {
+        "id": "e3",
+        "title": "第3集",
+        "stage": "3",
+        "isFeature": true,
+        "kind": "正片",
+        "imageURL": "https://img.example.com/e3.jpg",
+        "isPaid": false
+      }
+    ],
+    "ranges": [
+      {
+        "title": "1-30",
+        "section": "正片",
+        "cursor": "eps:1"
+      },
+      {
+        "title": "31-40",
+        "section": "正片",
+        "cursor": "eps:31"
+      }
+    ],
+    "selectedRange": {
+      "title": "1-30",
+      "section": "正片",
+      "cursor": "eps:1"
+    },
+    "summary": "更新至40集",
+    "parts": [
+      {
+        "id": "s1",
+        "title": "第一季",
+        "isCurrent": true
+      },
+      {
+        "id": "s1b",
+        "title": "第二季",
+        "isCurrent": false
+      }
+    ]
+  },
+  "series": [],
+  "recommendations": {
+    "tabs": [
+      {
+        "title": "为你推荐"
+      },
+      {
+        "title": "某演员的作品",
+        "imageURL": "https://img.example.com/c2.jpg",
+        "cursor": "rec:c2"
+      }
+    ],
+    "items": [
+      {
+        "id": "s2",
+        "title": "另一部剧",
+        "posterURL": "https://img.example.com/s2-poster.jpg",
+        "landscapeURL": "https://img.example.com/s2-wide.jpg",
+        "caption": "24集全",
+        "target": {
+          "show": "s2"
+        }
+      }
+    ]
+  },
+  "resume": {
+    "videoID": "e3",
+    "progress": 0.42
+  }
+}

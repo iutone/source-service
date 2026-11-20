@@ -1,0 +1,34 @@
+{
+  "name": "iyt-source-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "IUTone 自建源的参考服务端（docs/remote-source/SERVER.md）",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.4.0",
+      "onFail": "error"
+    }
+  },
+  "scripts": {
+    "dev": "node --watch packages/cli/src/main.ts serve --config data/config.yaml",
+    "serve": "node packages/cli/src/main.ts serve",
+    "check": "node packages/cli/src/main.ts check",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "fixtures": "node scripts/fixtures.ts"
+  },
+  "devDependencies": {
+    "@iyt-source/kit": "workspace:*",
+    "@iyt-source/protocol": "workspace:*",
+    "@types/node": "^22.15.0",
+    "ajv": "^8.20.0",
+    "ts-json-schema-generator": "2.9.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.9"
+  }
+}

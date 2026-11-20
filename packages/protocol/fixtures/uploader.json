@@ -1,0 +1,13 @@
+{
+  "uploader": {
+    "id": "u1",
+    "name": "某 UP 主",
+    "avatarURL": "https://img.example.com/u1.jpg",
+    "followers": 154000
+  },
+  "signature": "做视频的",
+  "followingCount": 12,
+  "videoCount": 88,
+  "isFollowing": false,
+  "detail": "15.4万位订阅者"
+}

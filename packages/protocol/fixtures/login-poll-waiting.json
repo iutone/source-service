@@ -1,0 +1,8 @@
+{
+  "loginId": "LOGIN_ID",
+  "seq": 2,
+  "step": {
+    "kind": "waiting",
+    "message": "已扫码，请在手机上确认"
+  }
+}

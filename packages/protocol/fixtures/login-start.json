@@ -1,0 +1,8 @@
+{
+  "loginId": "LOGIN_ID",
+  "seq": 0,
+  "step": {
+    "kind": "waiting",
+    "message": "正在准备登录"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "isLiked": true,
+  "coins": 1,
+  "maxCoins": 2,
+  "coinsToday": 3,
+  "coinsPerDay": 5,
+  "isFavorited": false,
+  "isFollowingUploader": true,
+  "isDisliked": false
+}

@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "v4",
+      "title": "更多视频",
+      "landscapeURL": "https://img.example.com/v4.jpg",
+      "uploader": {
+        "id": "u1",
+        "name": "某 UP 主",
+        "avatarURL": "https://img.example.com/u1.jpg"
+      },
+      "stats": {
+        "views": 12345,
+        "danmaku": 67,
+        "likes": 890
+      },
+      "duration": 754,
+      "publishedAt": "2026-11-19T08:00:00Z",
+      "target": {
+        "video": "v4"
+      }
+    }
+  ],
+  "next": null
+}

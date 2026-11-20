@@ -1,0 +1,80 @@
+{
+  "kind": "standalone",
+  "title": "一个视频",
+  "shortSummary": "一段简介",
+  "landscapeURL": "https://img.example.com/v1.jpg",
+  "ratings": [],
+  "tags": [
+    "知识"
+  ],
+  "isPaid": false,
+  "credits": [],
+  "defaultVideoID": "v1",
+  "series": [],
+  "uploads": {
+    "episodes": [
+      {
+        "id": "v9",
+        "title": "他的另一个视频",
+        "stage": "1",
+        "isFeature": true,
+        "isPaid": false,
+        "duration": 300,
+        "views": 1000,
+        "publishedAt": "2026-11-01T00:00:00Z"
+      }
+    ],
+    "ranges": [
+      {
+        "title": "1-30",
+        "cursor": "uploads:1"
+      }
+    ]
+  },
+  "recommendations": {
+    "tabs": [],
+    "items": [
+      {
+        "id": "v2",
+        "title": "另一个视频",
+        "landscapeURL": "https://img.example.com/v2.jpg",
+        "uploader": {
+          "id": "u1",
+          "name": "某 UP 主",
+          "avatarURL": "https://img.example.com/u1.jpg"
+        },
+        "stats": {
+          "views": 12345,
+          "danmaku": 67,
+          "likes": 890
+        },
+        "duration": 754,
+        "publishedAt": "2026-11-19T08:00:00Z",
+        "target": {
+          "video": "v2"
+        }
+      }
+    ]
+  },
+  "uploader": {
+    "id": "u1",
+    "name": "某 UP 主",
+    "avatarURL": "https://img.example.com/u1.jpg",
+    "followers": 154000
+  },
+  "coUploaders": [
+    {
+      "id": "u2",
+      "name": "合作者"
+    }
+  ],
+  "stats": {
+    "views": 12345,
+    "likes": 890,
+    "coins": 12,
+    "favorites": 34,
+    "replies": 56
+  },
+  "publishedAt": "2026-11-19T08:00:00Z",
+  "duration": 754
+}
