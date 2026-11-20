@@ -10,3 +10,11 @@ services:
       - ./data:/data                      # config.yaml、登录态、进度、插件
       - /volume1/video:/media/videos:ro   # 换成 NAS 上的视频目录
     restart: unless-stopped
+
+  # 可选：YouTube 的 PO Token 服务（bgutil，GPL-3.0，用它官方的镜像，不打进上面的镜像）。yt-dlp 的 bgutil 插件
+  # 默认找 127.0.0.1:4416；不跑它也能用，YouTube 收紧时才需要（docs/remote-source/SERVER.md §15）。
+  bgutil-pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    network_mode: host
+    restart: unless-stopped
+

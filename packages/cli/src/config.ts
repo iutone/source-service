@@ -16,7 +16,7 @@ export interface Config {
   allowedHosts: string[]
   bonjour: boolean
   debug: boolean
-  ytdlp?: { path?: string; update?: string[] }
+  ytdlp?: { path?: string; update?: string[]; args?: string[] }
   sources: SourceConfig[]
   /** 配置文件所在目录之外的数据目录（server.json、各源存储、插件）。 */
   dataDir: string

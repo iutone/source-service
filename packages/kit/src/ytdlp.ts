@@ -4,6 +4,8 @@ import { SourceError } from './errors.ts'
 export interface YtDlpOptions {
   /** 可执行文件，默认 `yt-dlp`（环境变量 `YTDLP_PATH` 优先）。 */
   binary?: string
+  /** 每次都带的参数，如 `["--js-runtimes", "node"]`（或环境变量 `YTDLP_ARGS`，空格分隔）。 */
+  args?: string[]
   concurrency?: number
   timeoutMs?: number
   /** 更新命令，如 `["/opt/venv/bin/pip", "install", "-U", "yt-dlp"]`（或环境变量 `YTDLP_UPDATE`，空格分隔）；不配就不更新。 */
@@ -18,6 +20,7 @@ interface Cached {
 /** yt-dlp 子进程包装（SERVER.md §12.4）：限并发、超时、按 URL + 参数缓存、失败后可触发更新。 */
 export class YtDlp {
   private readonly binary: string
+  private readonly baseArgs: string[]
   private readonly concurrency: number
   private readonly timeoutMs: number
   private readonly updateCommand?: string[]
@@ -29,6 +32,7 @@ export class YtDlp {
 
   constructor(options: YtDlpOptions = {}) {
     this.binary = process.env.YTDLP_PATH || options.binary || 'yt-dlp'
+    this.baseArgs = options.args ?? process.env.YTDLP_ARGS?.split(' ').filter(Boolean) ?? []
     this.concurrency = options.concurrency ?? 4
     this.timeoutMs = options.timeoutMs ?? 20_000
     this.updateCommand = options.updateCommand ?? process.env.YTDLP_UPDATE?.split(' ').filter(Boolean)
@@ -56,7 +60,7 @@ export class YtDlp {
     if (hit && hit.expires > Date.now()) return hit.value as T
     await this.acquire()
     try {
-      const { stdout } = await this.run(['-J', '--no-warnings', '--no-playlist', ...args, url], this.timeoutMs, options.signal)
+      const { stdout } = await this.run(['-J', '--no-warnings', '--no-playlist', ...this.baseArgs, ...args, url], this.timeoutMs, options.signal)
       const value = JSON.parse(stdout) as T
       if (options.cacheMs) this.cache.set(key, { value, expires: Date.now() + options.cacheMs })
       return value
@@ -135,9 +139,11 @@ export class YtDlp {
 /** 把 yt-dlp 的错误行映射成协议错误码。 */
 export function classify(message: string): SourceError {
   const text = message.replace(/^ERROR:\s*/, '')
-  if (/sign in|login|members-only|age/i.test(text)) return new SourceError('login_required', '需要登录后观看', { cause: text })
+  if (/not a bot/i.test(text)) return new SourceError('login_required', 'YouTube 要求确认不是机器人：服务的网络被限制了', { cause: text })
+  if (/sign in|log in|login|members-only|join this channel|confirm your age|age-restricted|inappropriate/i.test(text)) return new SourceError('login_required', '需要登录后观看', { cause: text })
   if (/private|removed|unavailable|not available|terminated|deleted/i.test(text)) return new SourceError('unplayable', '视频不可播放', { cause: text })
   if (/429|too many requests|rate/i.test(text)) return new SourceError('throttled', '请求太频繁，请稍后再试', { cause: text })
+  if (/timed out|urlopen error|connection (reset|refused)|network is unreachable|temporary failure/i.test(text)) return new SourceError('unavailable', '服务连不上 YouTube', { cause: text, retryable: true })
   if (/geo|country|region/i.test(text)) return new SourceError('restricted', '所在地区不可播放', { cause: text })
   return new SourceError('upstream_changed', '解析失败，可能需要更新', { cause: text })
 }

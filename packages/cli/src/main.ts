@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { EnvHttpProxyAgent, setGlobalDispatcher } from 'undici'
+import { Agent, EnvHttpProxyAgent, setGlobalDispatcher } from 'undici'
 import { advertise, createServer, YtDlp, type Logger } from '@iyt-source/kit'
 import { check } from './check.ts'
 import { loadConfig } from './config.ts'
@@ -19,9 +19,10 @@ function option(args: string[], name: string): string | undefined {
 
 async function serve(args: string[]) {
   // 平台请求走环境里的代理（HTTPS_PROXY / NO_PROXY）；局域网与媒体网关的上游也一样遵守 NO_PROXY。
-  if (process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy) {
-    setGlobalDispatcher(new EnvHttpProxyAgent())
-  }
+  // 响应头上限放到 64 KB：youtube.com/tv 的 Set-Cookie 超过 Node 默认的 16 KB。
+  const maxHeaderSize = 64 * 1024
+  const proxied = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy
+  setGlobalDispatcher(proxied ? new EnvHttpProxyAgent({ maxHeaderSize }) : new Agent({ maxHeaderSize }))
   const { config, path, created } = loadConfig(option(args, '--config'))
   const log: Logger = {
     info: (message, fields) => console.log(JSON.stringify({ level: 'info', message, ...fields })),
@@ -37,7 +38,7 @@ async function serve(args: string[]) {
       log.error(`源 ${source.id}（${source.plugin}）加载失败`, { error: String(error) })
     }
   }
-  const ytdlp = new YtDlp({ binary: config.ytdlp?.path, updateCommand: config.ytdlp?.update })
+  const ytdlp = new YtDlp({ binary: config.ytdlp?.path, updateCommand: config.ytdlp?.update, args: config.ytdlp?.args })
   const server = await createServer({
     name: config.name,
     dataDir: config.dataDir,
