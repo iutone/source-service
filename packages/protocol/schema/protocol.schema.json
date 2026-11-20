@@ -730,20 +730,7 @@
           "type": "boolean"
         },
         "feed": {
-          "additionalProperties": false,
-          "properties": {
-            "channelBrowser": {
-              "type": "boolean"
-            },
-            "homeShowsHistory": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "homeShowsHistory",
-            "channelBrowser"
-          ],
-          "type": "object"
+          "$ref": "#/definitions/FeedFeatures"
         },
         "filter": {
           "type": "boolean"
@@ -818,6 +805,34 @@
         "subtitles",
         "progress",
         "fairPlay"
+      ],
+      "type": "object"
+    },
+    "FeedFeatures": {
+      "additionalProperties": false,
+      "description": "首页与置顶频道（§3.1）：App 打开这个源时就要用，所以放在 manifest 里，而不是等 `feed/channels`。 有 feed 模块的源一定给出 `home`；它们可能随登录状态变（YouTube 登录后首页是订阅）。",
+      "properties": {
+        "channelBrowser": {
+          "type": "boolean"
+        },
+        "home": {
+          "$ref": "#/definitions/Channel",
+          "description": "首页频道：`feed/channel?id=` 用它的 id。"
+        },
+        "homeShowsHistory": {
+          "type": "boolean"
+        },
+        "pinned": {
+          "description": "默认置顶为标签的频道（TV），用户没改过置顶时用。",
+          "items": {
+            "$ref": "#/definitions/Channel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "homeShowsHistory",
+        "channelBrowser"
       ],
       "type": "object"
     },
@@ -1962,6 +1977,10 @@
         },
         "id": {
           "type": "string"
+        },
+        "keepable": {
+          "description": "App 能否缓存到本地，默认 true（§6.1）。要缓存的 HLS 必须是完整的点播 playlist（有 `EXT-X-ENDLIST`）。",
+          "type": "boolean"
         },
         "language": {
           "$ref": "#/definitions/AudioLanguage"

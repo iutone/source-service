@@ -211,8 +211,18 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     const brand = { ...plugin.info.brand }
     if (!brand.logo && plugin.info.assets?.logo) brand.logo = `${BASE_PATH}/sources/${id}/assets/logo`
     if (!brand.tabIcon && plugin.info.assets?.tabIcon) brand.tabIcon = `${BASE_PATH}/sources/${id}/assets/tabIcon`
+    // 首页与置顶频道放进 manifest（§3.1）：App 打开这个源时就要，不能等 feed/channels。
+    let layout: Pick<Features['feed'], 'home' | 'pinned'> = {}
+    if (plugin.feed) {
+      try {
+        const channels = await plugin.feed.channels(ctx)
+        layout = { home: channels.home, pinned: channels.pinned }
+      } catch (error) {
+        entry.log.warn('feed channels failed', { error: String(error) })
+      }
+    }
     const features: Features = {
-      feed: { homeShowsHistory: plugin.feed?.homeShowsHistory ?? false, channelBrowser: plugin.feed?.channelBrowser ?? true },
+      feed: { homeShowsHistory: plugin.feed?.homeShowsHistory ?? false, channelBrowser: plugin.feed?.channelBrowser ?? true, ...layout },
       filter: Boolean(plugin.filter),
       search: plugin.search
         ? {

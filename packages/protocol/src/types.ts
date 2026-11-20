@@ -107,7 +107,7 @@ export interface ActionFeatures {
 }
 
 export interface Features {
-  feed: { homeShowsHistory: boolean; channelBrowser: boolean }
+  feed: FeedFeatures
   filter: boolean
   search: { rankings: boolean; suggestions: boolean; videos: boolean; prompt?: string } | null
   detail: { comments: boolean; uploader: boolean; actions: ActionFeatures | null }
@@ -116,6 +116,19 @@ export interface Features {
   subtitles: boolean
   progress: boolean
   fairPlay: boolean
+}
+
+/**
+ * 首页与置顶频道（§3.1）：App 打开这个源时就要用，所以放在 manifest 里，而不是等 `feed/channels`。
+ * 有 feed 模块的源一定给出 `home`；它们可能随登录状态变（YouTube 登录后首页是订阅）。
+ */
+export interface FeedFeatures {
+  homeShowsHistory: boolean
+  channelBrowser: boolean
+  /** 首页频道：`feed/channel?id=` 用它的 id。 */
+  home?: Channel
+  /** 默认置顶为标签的频道（TV），用户没改过置顶时用。 */
+  pinned?: Channel[]
 }
 
 export interface SourceManifest {

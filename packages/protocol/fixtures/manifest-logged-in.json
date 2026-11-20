@@ -50,7 +50,17 @@
       "features": {
         "feed": {
           "homeShowsHistory": true,
-          "channelBrowser": true
+          "channelBrowser": true,
+          "home": {
+            "id": "home",
+            "title": "首页"
+          },
+          "pinned": [
+            {
+              "id": "tv",
+              "title": "电视剧"
+            }
+          ]
         },
         "filter": true,
         "search": {

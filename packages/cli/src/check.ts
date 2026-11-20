@@ -57,9 +57,13 @@ export async function check(baseURL: string, print: (line: string) => void = con
       print('  - 未登录且浏览需要登录，跳过其余检查')
       return
     }
+    const home = source.features.feed.home
+    if (!home?.id) return fail('manifest 的 features.feed 缺 home（App 打开源时就要用）')
+    ok(`首页「${home.title}」，置顶 ${source.features.feed.pinned?.map((c) => c.title).join('、') || '无'}`)
     const channels = await get<{ home: { id: string }; channels: unknown[] }>(`${prefix}/feed/channels`)
-    channels.home?.id ? ok(`频道：首页 + ${channels.channels.length} 个`) : fail('feed/channels 缺 home')
-    const feed = await get<FeedPage>(`${prefix}/feed/channel?id=${encodeURIComponent(channels.home.id)}`)
+    if (channels.home?.id !== home.id) fail(`feed/channels 的首页（${channels.home?.id}）和 manifest 的（${home.id}）不一致`)
+    else ok(`频道：${channels.channels.length} 个`)
+    const feed = await get<FeedPage>(`${prefix}/feed/channel?id=${encodeURIComponent(home.id)}`)
     const items = feed.sections.flatMap((section) => {
       if (!section.id || !section.style || !Array.isArray(section.items)) fail(`分区形状不对：${JSON.stringify(section).slice(0, 120)}`)
       return section.items

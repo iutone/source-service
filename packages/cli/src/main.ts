@@ -51,7 +51,14 @@ async function serve(args: string[]) {
     logger: process.env.IYT_LOG_REQUESTS === '1',
   })
   await server.app.listen({ port: config.port, host: config.host })
-  const bonjour = config.bonjour ? advertise({ name: config.name, port: config.port, serverId: server.serverId }) : undefined
+  const bonjour = config.bonjour
+    ? advertise({
+        name: config.name,
+        port: config.port,
+        serverId: server.serverId,
+        onError: (error) => log.warn('Bonjour 广播出错，10 秒后重新广播', { error: String(error) }),
+      })
+    : undefined
   log.info(`「${config.name}」已启动`, {
     port: config.port,
     serverId: server.serverId,
