@@ -71,6 +71,11 @@
         "subtitles": true,
         "progress": true,
         "fairPlay": false
+      },
+      "links": {
+        "patterns": [
+          "^https?://(www\\.)?example\\.com/(watch|show)/[\\w-]+"
+        ]
       }
     }
   ]

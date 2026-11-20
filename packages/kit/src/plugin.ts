@@ -17,6 +17,7 @@ import type {
   FilterDimension,
   FilterSelection,
   HistoryPage,
+  LinkResolution,
   LoginMethod,
   LoginStep,
   MediaItem,
@@ -144,6 +145,13 @@ export interface HistoryModule {
   clear?(ctx: Ctx): Promise<void>
 }
 
+/** 链接解析（SERVER.md §5.10）：`patterns` 写进 manifest，App 本地匹配后才调 `resolve`。 */
+export interface LinksModule {
+  patterns: string[]
+  /** 认不出返回 null（App 当普通网页打开）。 */
+  resolve(url: string, ctx: Ctx): Promise<LinkResolution | null>
+}
+
 export interface PlaybackModule {
   resolve(request: ResolveRequest, ctx: Ctx): Promise<PlaybackMedia>
   progress?(request: ProgressRequest, ctx: Ctx): Promise<void>
@@ -164,6 +172,7 @@ export interface SourcePlugin {
   danmaku?: DanmakuModule
   history?: HistoryModule
   playback: PlaybackModule
+  links?: LinksModule
   /** 服务停止时调用。 */
   close?(): Promise<void>
 }

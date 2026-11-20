@@ -125,6 +125,26 @@ export interface SourceManifest {
   status: { state: SourceState; message?: string }
   account: AccountManifest
   features: Features
+  /** 这个源认得的链接（§5.10）；没有就不接粘贴的链接。 */
+  links?: LinkPatterns
+}
+
+// MARK: 链接解析（§5.10）
+
+export interface LinkPatterns {
+  /** 正则（ICU / JavaScript 共有的子集），匹配整个链接（含 scheme）；任一个匹配，App 才把链接交给这个源。 */
+  patterns: string[]
+}
+
+export interface LinkResolveRequest {
+  url: string
+}
+
+/** `links/resolve` 的响应：链接指向的节目或视频。认不出返回 404 `not_found`。 */
+export interface LinkResolution {
+  target: Target
+  /** 给「打开了什么」的提示用。 */
+  title?: string
 }
 
 // MARK: 共享模型（§4）

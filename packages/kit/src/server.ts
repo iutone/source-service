@@ -11,6 +11,7 @@ import {
   type LoginMethod,
   type Manifest,
   type ProgressRequest,
+  type LinkResolveRequest,
   type ResolveRequest,
   type SourceManifest,
   type Target,
@@ -239,6 +240,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
       status: plugin.info.status?.() ?? { state: 'ready' },
       account,
       features,
+      links: plugin.links && plugin.links.patterns.length > 0 ? { patterns: plugin.links.patterns } : undefined,
     }
   }
 
@@ -548,6 +550,16 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     const { ref, key } = request.params as { ref: string; key: string }
     const playback = entry.plugin.playback
     return { cues: await requiredModule(playback.cues?.bind(playback), '字幕')(ref, key, context(request, entry)) }
+  })
+
+  // 链接解析（§5.10）
+  app.post(`${S}/links/resolve`, async (request) => {
+    const entry = source(request)
+    const links = requiredModule(entry.plugin.links, '链接解析')
+    const url = required(body<LinkResolveRequest>(request).url, 'url')
+    const resolution = await links.resolve(url, context(request, entry))
+    if (!resolution) throw notFound('链接')
+    return resolution
   })
 
   // 媒体网关（§7）

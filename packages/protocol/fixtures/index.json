@@ -336,6 +336,26 @@
     "status": 200
   },
   {
+    "name": "links-resolve",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/links/resolve",
+    "body": {
+      "url": "https://example.com/watch/v1?t=42"
+    },
+    "type": "LinkResolution",
+    "status": 200
+  },
+  {
+    "name": "links-resolve-unknown",
+    "method": "POST",
+    "path": "/iyt/v1/sources/sample/links/resolve",
+    "body": {
+      "url": "https://example.com/about"
+    },
+    "type": "ErrorBody",
+    "status": 404
+  },
+  {
     "name": "account-logout",
     "method": "POST",
     "path": "/iyt/v1/sources/sample/account/logout",

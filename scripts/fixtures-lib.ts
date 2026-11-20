@@ -60,6 +60,8 @@ export const CASES: Omit<FixtureCase, 'status'>[] = [
   { name: 'playback-resolve', method: 'POST', path: `${S}/playback/resolve`, body: { video: 'e3', show: 's1', preferences: { maxQualityRank: 1080, language: null, adaptive: false } }, type: 'PlaybackMedia' },
   { name: 'playback-progress', method: 'POST', path: `${S}/playback/progress`, body: { event: 'progress', video: 'e3', show: 's1', position: 330.2, duration: 1500, reportContext: { show: 's1', episode: 'e3', session: 42 } } },
   { name: 'subtitles-cues', method: 'GET', path: `${S}/subtitles/e3/en.asr`, type: 'CueList' },
+  { name: 'links-resolve', method: 'POST', path: `${S}/links/resolve`, body: { url: 'https://example.com/watch/v1?t=42' }, type: 'LinkResolution' },
+  { name: 'links-resolve-unknown', method: 'POST', path: `${S}/links/resolve`, body: { url: 'https://example.com/about' }, type: 'ErrorBody' },
   { name: 'account-logout', method: 'POST', path: `${S}/account/logout`, body: {} },
   { name: 'error-not-found', method: 'GET', path: `${S}/nothing`, type: 'ErrorBody' },
   { name: 'error-bad-request', method: 'GET', path: `${S}/detail?target=oops`, type: 'ErrorBody' },

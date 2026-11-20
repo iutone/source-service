@@ -335,6 +335,15 @@ export function createSampleSource(): SourcePlugin {
       async clear() {},
     },
 
+    links: {
+      patterns: ['^https?://(www\\.)?example\\.com/(watch|show)/[\\w-]+'],
+      async resolve(url) {
+        const match = /example\.com\/(watch|show)\/([\w-]+)/.exec(url)
+        if (!match) return null
+        return match[1] === 'show' ? { target: { show: match[2] }, title: '示例剧' } : { target: { video: match[2] }, title: '一个视频' }
+      },
+    },
+
     playback: {
       async resolve(request) {
         return {
