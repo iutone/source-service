@@ -2,9 +2,7 @@
 services:
   iyt-source:
     image: iyt-source-server:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    build: .
     network_mode: host
     volumes:
       - ./data:/data                      # config.yaml、登录态、进度、插件

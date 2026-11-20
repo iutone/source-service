@@ -39,7 +39,8 @@ Node 22.18+ 直接运行 `.ts`（类型擦除），没有构建步骤。平台�
 ## Docker（NAS）
 
 ```bash
-cd docker && docker compose up -d --build
+docker build -t iyt-source-server .      # Dockerfile 在本目录，基础镜像 registry.cn-beijing.aliyuncs.com/mxc/base
+docker compose up -d --build              # 或连同可选的 PO Token sidecar 一起起
 ```
 
 必须 `network_mode: host`，否则 Bonjour 广播出不去。镜像带 Python + yt-dlp（每天自动更新）和 ffmpeg。
