@@ -54,9 +54,14 @@ docker pull registry.cn-beijing.aliyuncs.com/mxc/iutone:latest
 ```bash
 docker run -d --name iutone --restart unless-stopped --network host \
   -v /share/Container/iutone/data:/data \
+  registry.cn-beijing.aliyuncs.com/mxc/iutone:latest
+```
+
+要让服务单独走一个代理时再加（见下面「代理」）：
+
+```bash
   -e HTTPS_PROXY=http://<代理地址>:7890 -e HTTP_PROXY=http://<代理地址>:7890 \
   -e NO_PROXY=localhost,127.0.0.1,192.168.0.0/16,10.0.0.0/8,.local \
-  registry.cn-beijing.aliyuncs.com/mxc/iutone:latest
 ```
 
 - **必须 `--network host`**：App 靠 Bonjour（mDNS）发现服务，桥接网络里广播出不去。端口默认 8090，配置里的 `port` 可改。
@@ -64,8 +69,9 @@ docker run -d --name iutone --restart unless-stopped --network host \
   这时只有调试页，没有任何源。
 - **视频目录**默认不挂、也不开「本地视频」源。要用时加 `-v /share/video:/media/videos:ro`，再在配置里加上 `folder` 源。
   群晖、威联通的共享文件夹常是符号链接，挂载真实路径（`readlink -f`）。
-- **代理**：服务去平台取数据、yt-dlp 取流都走 `HTTPS_PROXY` / `HTTP_PROXY`（大小写两种都认）。`NO_PROXY` 一定要带上局域网
-  网段，否则访问局域网里的东西也会绕到代理上。App 访问这个服务不走代理，只连局域网。
+- **代理（可选）**：不设就直接联网。路由器或旁路由已经给 NAS 做了透明代理（网关 / DNS 指过去）的，什么都不用加。
+  只有要让服务单独走某个代理时才设 `HTTPS_PROXY` / `HTTP_PROXY`（大小写两种都认）：服务去平台取数据、yt-dlp 取流都会走它，
+  这时 `NO_PROXY` 一定要带上局域网网段，否则访问局域网里的东西也会绕到代理上。App 访问这个服务不走代理，只连局域网。
 - 用 compose 的话见 `docker-compose.yml`（同样是 host 网络，带一个可选的 PO Token 服务）。
 
 ### 配置源
@@ -97,6 +103,7 @@ sources:
 
 ### 代理节点注意事项（YouTube）
 
+- 不管代理是设在服务上还是路由器上，下面都一样适用。
 - **取流在服务端**：App 播放时只连这台服务，视频由服务里的 yt-dlp 从 YouTube 取、经服务转发。能不能播只看**服务的
   出口节点**，和电视、手机自己走什么代理无关（设备的代理只影响封面、头像这类直接从 `i.ytimg.com` 加载的图片）。
 - **机房 IP 会被要求验证**：YouTube 会对一些机房 IP 要求「确认不是机器人」，这时所有视频都取不到流，App 里提示
