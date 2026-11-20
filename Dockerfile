@@ -39,8 +39,10 @@ RUN set -eux; \
 
 COPY . .
 
-# pnpm 版本要和 package.json 的 devEngines 一致（不一致直接报错）。
-RUN npm exec --yes --registry=https://registry.npmmirror.com pnpm@11.4.0 -- install --prod --frozen-lockfile --registry=https://registry.npmmirror.com
+# pnpm 版本要和 package.json 的 devEngines 一致（不一致直接报错）。npm 在项目目录里也会查 devEngines、拒绝运行
+# （要的是 pnpm），所以先在项目外把 pnpm 装到 /opt/pnpm（不装全局，免得和基础镜像里的 pnpm 冲突），再用它装依赖。
+RUN cd / && npm install --prefix /opt/pnpm --no-audit --no-fund --registry=https://registry.npmmirror.com pnpm@11.4.0
+RUN /opt/pnpm/node_modules/.bin/pnpm install --prod --frozen-lockfile --registry=https://registry.npmmirror.com
 
 RUN mkdir -p /data
 ENV IYT_DATA=/data \
