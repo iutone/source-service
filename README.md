@@ -123,6 +123,88 @@ sources:
 - **PO Token**：`docker-compose.yml` 里的 `bgutil-pot` 能让 yt-dlp 带上 PO Token，YouTube 更信任一些。它是 GPL-3.0，
   所以不打进镜像，按需单独跑。节点 IP 本身信誉太差时它也救不回来，先换节点。
 
+### 多个出口自动切换（出口池）
+
+YouTube 会按出口 IP 单独限流某些接口：字幕（`/api/timedtext` 返回 429，App 里「YouTube 暂时限制了这台服务取字幕」）、
+yt-dlp 的「不是机器人」验证；同一个出口的播放、浏览往往不受影响。与其每次手动换节点，可以给服务几个固定出口，
+被限时它自己换下一个用，冷却一段时间后再试回来。
+
+1. **在代理软件里开几个固定出口**：每个出口一个端口、绑一个节点，节点选不同地区或线路。以 mihomo / Clash Meta
+   （OpenClash 用的内核）为例，在配置里加几个选择组和对应的监听端口：
+
+   ```yaml
+   proxy-groups:
+     - { name: IYT 1, type: select, use: [<你的订阅>] }
+     - { name: IYT 2, type: select, use: [<你的订阅>] }
+   listeners:
+     - { name: iyt-1, type: mixed, port: 7901, listen: 0.0.0.0, proxy: IYT 1 }
+     - { name: iyt-2, type: mixed, port: 7902, listen: 0.0.0.0, proxy: IYT 2 }
+   ```
+
+   OpenClash 每次启动会重新生成配置，所以写在「覆写设置」的自定义脚本里（`openclash_custom_overwrite.sh`）。
+   然后在控制台给每个 `IYT n` 组选一个节点，并打开「记住节点选择」。代理跑在虚拟机里时，记得把这几个端口也转发出来。
+2. **挑节点**：先在容器里实测哪些节点能取字幕（拿一条字幕地址，经各个出口请求，200 可用、429 被限），被限的不要用：
+
+   ```bash
+   docker exec iutone curl -s -o /dev/null -w '%{http_code}\n' -x http://<代理地址>:7901 '<字幕地址>'
+   ```
+3. **在服务配置里列出出口**（`config.yaml`），然后 `docker restart iutone`：
+
+   ```yaml
+   exits:
+     cooldownMinutes: 30          # 被限后冷却多久
+     pools:                        # 用途 → 出口，按顺序用
+       subtitles: [http://<代理地址>:7901, http://<代理地址>:7902]
+       ytdlp:     [http://<代理地址>:7902, http://<代理地址>:7901]
+   ```
+
+   - `subtitles`：字幕文件；`ytdlp`：yt-dlp 取格式（视频分片会跟着解析时的出口走）。没列的用途照旧走 `HTTPS_PROXY`。
+   - 两个用途的顺序可以错开，把请求分散到不同出口。
+4. **看状态**：调试页「请求日志」上方的「出口」表：每个出口可用还是冷却到几点、被限次数、最近一次被限的原因。
+   日志里会有「出口被限，冷却」「这个用途的出口都在冷却」「出口恢复」。某个出口总是被限，就在代理控制台给它换个节点，
+   不用改服务配置。
+
+### 常见问题：让 AI 帮你查日志
+
+遇到播放失败、字幕取不到、App 里一直加载、源不显示，可以把下面的命令交给能执行命令的 AI 助手（比如 Claude Code），
+让它登录 NAS 自己查。先告诉它：NAS 的地址和登录方式（SSH 用户、密钥）、容器名（默认 `iutone`）、出问题的大概时间和
+现象（哪个视频、App 里的提示）。
+
+- **服务日志**（JSON 一行一条，`level` / `message` 和相关字段）：
+
+  ```bash
+  docker logs --since 30m iutone 2>&1 | tail -200
+  docker logs --since 30m iutone 2>&1 | grep -E '"level":"(warn|error)"'
+  ```
+
+  QNAP 的 Container Station 里 `docker` 不在 PATH：先 `export PATH=/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH`。
+- **请求日志**（最近 300 个请求：路径、状态码、耗时、错误码和原因、来自哪台设备）：
+
+  ```bash
+  curl -s http://127.0.0.1:8090/debug/api/log
+  ```
+- **出口状态**：`curl -s http://127.0.0.1:8090/debug/api/exits`
+- **复现一次**：解析一个视频，看返回的 `diagnostics`（用的哪个出口、取流方式）和错误：
+
+  ```bash
+  curl -s -X POST -H 'content-type: application/json' -d '{"video":"<视频 id>"}' \
+    http://127.0.0.1:8090/iyt/v1/sources/youtube/playback/resolve
+  ```
+- **接口是否完整**：`docker exec iutone node packages/cli/src/main.ts check http://127.0.0.1:8090`。
+
+给 AI 的提示可以这样写：「NAS 是 <地址>，用 `ssh <用户>@<地址>` 登录，自建源容器叫 iutone。<时间> 在电视上 <现象>。
+请按 README『常见问题』里的命令查服务日志和请求日志，找出原因；只看不改，要改配置或重启前先问我。」
+
+常见原因对照：
+
+| 现象 | 日志里看到的 | 处理 |
+|---|---|---|
+| 所有视频都放不了 | yt-dlp 报 `Sign in to confirm you're not a bot` | 出口被拦：配出口池，或给 YouTube 换节点 |
+| 字幕、字幕翻译取不到 | 字幕请求 429、「出口被限，冷却」 | 出口池里换下被限的节点，或等冷却 |
+| App 里提示需要登录 | `login_required` | 调试页或 App「我的」里登录；会员 / 年龄限制的视频要网页登录 |
+| 解析很慢 | `playback/resolve` 耗时十几秒 | 出口节点慢，换一个快的 |
+| 源在 App 里不显示 | 服务没起来，或 App 和服务不在同一网络 | 看 `docker logs` 是否「已启动」；容器必须 `--network host` |
+
 ## 写一个源
 
 插件包默认导出一个工厂函数 `(options, env) => SourcePlugin`（`@iyt-source/kit` 的 `plugin.ts`）：有哪些模块
