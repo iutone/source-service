@@ -20,6 +20,7 @@ import type { KeyValueStore } from './store.ts'
 type Entry =
   | { kind: 'file'; path: string; contentType?: string; expires: number }
   | { kind: 'text'; body: string; contentType: string; expires: number }
+  | { kind: 'generated'; produce: () => Promise<string>; contentType: string; expires: number }
   | {
       kind: 'proxy'
       url: string
@@ -118,6 +119,13 @@ export class MediaGateway {
   }
 
   /**
+   * 第一次被请求时才生成的文本（字幕：由源去取、缓存、限流，不让网关直接转发上游）。`produce` 抛的 `SourceError` 原样返回。
+   */
+  generated(produce: () => Promise<string>, options: MediaOptions & { name: string }): string {
+    return this.add({ kind: 'generated', produce, contentType: options.contentType ?? contentTypeOf(options.name), expires: this.expiry(options) }, options.name)
+  }
+
+  /**
    * 代理上游地址。`playlist`：`auto` 按响应的 Content-Type 和内容判断是不是 HLS。
    */
   proxy(url: string, options: MediaOptions & { headers?: Record<string, string>; playlist?: 'auto' | 'yes' | 'no' } = {}): string {
@@ -172,6 +180,11 @@ export class MediaGateway {
       case 'text':
         reply.header('content-type', entry.contentType).header('cache-control', 'no-store')
         return void reply.send(request.method === 'HEAD' ? undefined : entry.body)
+      case 'generated': {
+        const body = await entry.produce()
+        reply.header('content-type', entry.contentType).header('cache-control', 'no-store')
+        return void reply.send(request.method === 'HEAD' ? undefined : body)
+      }
       case 'proxy': {
         // 子地址：c/<index>/<name>
         const child = /^c\/(\d+)\//.exec(rest)
