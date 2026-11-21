@@ -55,3 +55,16 @@ describe('ExitPool', () => {
     expect(await exits.run('ytdlp', async (exit) => exit?.url ?? 'direct', () => undefined, '')).toBe('direct')
   })
 })
+
+describe('YtDlp.forget', () => {
+  it('drops every cached result of a url', async () => {
+    const { YtDlp } = await import('../src/index.ts')
+    const ytdlp = new YtDlp({ binary: 'true' })
+    const cache = (ytdlp as unknown as { cache: Map<string, unknown> }).cache
+    cache.set(JSON.stringify(['https://x/watch?v=a', []]), { value: 1, expires: Infinity })
+    cache.set(JSON.stringify(['https://x/watch?v=a', ['--proxy', 'http://p:1']]), { value: 2, expires: Infinity })
+    cache.set(JSON.stringify(['https://x/watch?v=b', []]), { value: 3, expires: Infinity })
+    expect(ytdlp.forget('https://x/watch?v=a')).toBe(2)
+    expect(cache.size).toBe(1)
+  })
+})

@@ -69,6 +69,18 @@ export class YtDlp {
     }
   }
 
+  /** 丢掉 `url` 的缓存结果（任何参数下的）：它给的地址被上游拒了，下次重新解析。 */
+  forget(url: string): number {
+    let count = 0
+    for (const key of [...this.cache.keys()]) {
+      if ((JSON.parse(key) as [string, string[]])[0] === url) {
+        this.cache.delete(key)
+        count += 1
+      }
+    }
+    return count
+  }
+
   get canUpdate(): boolean {
     return Boolean(this.updateCommand?.length)
   }

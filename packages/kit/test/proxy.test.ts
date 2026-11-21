@@ -12,6 +12,7 @@ let origin: string
 let server: SourceServer
 let data: string
 let resolved: PlaybackMedia
+let refused = 0
 
 beforeAll(async () => {
   upstream = createHTTPServer((request, response) => {
@@ -54,7 +55,10 @@ beforeAll(async () => {
         playback: {
           async resolve(_request, ctx) {
             const url = ctx.media.proxy(`${origin}/v/master.m3u8`, { headers: { 'x-token': 'secret' } })
-            return { title: 't', streams: [{ id: 'a', url, format: 'hls', quality: { rank: 720, label: '720P' }, description: 'proxy' }], selectedStream: 'a' }
+            // Without the header the upstream refuses (403): the source is told.
+            const bad = ctx.media.proxy(`${origin}/v/master.m3u8`, { onRefused: () => { refused += 1 } })
+            return { title: 't', streams: [{ id: 'a', url, format: 'hls', quality: { rank: 720, label: '720P' }, description: 'proxy' },
+              { id: 'b', url: bad, format: 'hls', quality: { rank: 360, label: '360P' }, description: 'refused' }], selectedStream: 'a' }
           },
         },
       },
@@ -88,6 +92,12 @@ describe('media gateway proxy', () => {
     expect(ranged.statusCode).toBe(206)
     expect(ranged.headers['content-range']).toBe('bytes 10-19/1000')
     expect(ranged.rawPayload.length).toBe(10)
+  })
+
+  it('tells the source when the upstream refuses an address', async () => {
+    const answer = await fetchLocal(resolved.streams[1].url)
+    expect(answer.json().error.code).toBe('unplayable')
+    expect(refused).toBe(1)
   })
 
   it('answers 410 for an unknown token', async () => {

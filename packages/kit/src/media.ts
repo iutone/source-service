@@ -27,6 +27,7 @@ type Entry =
       headers: Record<string, string>
       playlist: 'auto' | 'yes' | 'no'
       dispatcher?: unknown
+      onRefused?: () => void
       expires: number
       children: string[]
       childIndex: Map<string, number>
@@ -39,13 +40,14 @@ type Entry =
       headers: Record<string, string>
       via: 'direct' | 'proxy'
       dispatcher?: unknown
+      onRefused?: () => void
       expires: number
       children: string[]
       childIndex: Map<string, number>
       indexes: Map<string, Promise<SegmentIndex>>
     }
 
-type Children = { children: string[]; childIndex: Map<string, number>; dispatcher?: unknown }
+type Children = { children: string[]; childIndex: Map<string, number>; dispatcher?: unknown; onRefused?: () => void }
 
 export interface MediaOptions {
   /** 有效期，秒；默认 6 小时。 */
@@ -134,7 +136,11 @@ export class MediaGateway {
    * - Parameter dispatcher: 上游请求走的出口（出口池的，SERVER.md §18）；省略走全局代理。地址绑了解析时出口 IP 的
    *   （YouTube 的 googlevideo）必须和解析时同一个出口。
    */
-  proxy(url: string, options: MediaOptions & { headers?: Record<string, string>; playlist?: 'auto' | 'yes' | 'no'; dispatcher?: unknown } = {}): string {
+  /**
+   * - Parameter onRefused: 上游拒了这个地址（403 / 410，签名过期或绑定的出口不对）时调用：源可以丢掉它缓存的解析结果，
+   *   让 App 重试时拿到新地址，而不是缓存期内一直拿到同一个坏地址。
+   */
+  proxy(url: string, options: MediaOptions & { headers?: Record<string, string>; playlist?: 'auto' | 'yes' | 'no'; dispatcher?: unknown; onRefused?: () => void } = {}): string {
     const name = options.name ?? (basename(new URL(url).pathname) || 'media')
     return this.add(
       {
@@ -143,6 +149,7 @@ export class MediaGateway {
         headers: options.headers ?? {},
         playlist: options.playlist ?? 'auto',
         dispatcher: options.dispatcher,
+        onRefused: options.onRefused,
         expires: this.expiry(options),
         children: [],
         childIndex: new Map(),
@@ -155,7 +162,7 @@ export class MediaGateway {
    * 音视频分开的单文件 DASH 轨道（YouTube 的 https 格式），返回 master 地址。分段索引在播放器第一次请求时读取。
    * - Parameter via: `direct` 分片地址直接给 CDN（App 和服务同一出口时可用，省 NAS 带宽）；`proxy` 经网关转发。
    */
-  dash(tracks: { videos: DashVideoTrack[]; audios: DashAudioTrack[]; subtitles?: SubtitleRendition[] }, options: MediaOptions & { headers?: Record<string, string>; via?: 'direct' | 'proxy'; dispatcher?: unknown } = {}): string {
+  dash(tracks: { videos: DashVideoTrack[]; audios: DashAudioTrack[]; subtitles?: SubtitleRendition[] }, options: MediaOptions & { headers?: Record<string, string>; via?: 'direct' | 'proxy'; dispatcher?: unknown; onRefused?: () => void } = {}): string {
     if (tracks.videos.length === 0) throw new SourceError('unplayable', '没有可播放的视频轨')
     return this.add(
       {
@@ -166,6 +173,7 @@ export class MediaGateway {
         headers: options.headers ?? {},
         via: options.via ?? 'proxy',
         dispatcher: options.dispatcher,
+        onRefused: options.onRefused,
         expires: this.expiry(options),
         children: [],
         childIndex: new Map(),
@@ -227,7 +235,10 @@ export class MediaGateway {
     if (!index) {
       index = readSegmentIndex((start, end) => fetchRange(source.url, entry.headers, start, end, entry.dispatcher))
       entry.indexes.set(source.url, index)
-      index.catch(() => entry.indexes.delete(source.url))
+      index.catch((error) => {
+        entry.indexes.delete(source.url)
+        if (error instanceof SourceError && error.code === 'unplayable') entry.onRefused?.()
+      })
     }
     let segments: SegmentIndex
     try {
@@ -262,6 +273,7 @@ export class MediaGateway {
       throw new SourceError('unavailable', '上游连不上', { cause: error, retryable: true })
     }
     if (upstream.status === 403 || upstream.status === 410) {
+      entry.onRefused?.()
       throw new SourceError('unplayable', '上游拒绝了这个地址，请重新解析', { retryable: true })
     }
     if (!upstream.ok) {

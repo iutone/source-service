@@ -116,6 +116,15 @@ export class YouTubePlayback {
     const via = this.options.via ?? 'proxy'
     // googlevideo 的地址绑定解析时的出口 IP：网关取分片也走这个出口（SERVER.md §18）。
     const dispatcher = exit?.dispatcher
+    // 网关取这次的地址被上游拒了（签名、绑定的出口对不上）：丢掉这个视频的解析缓存，App 重试时重新解析，
+    // 而不是缓存期内一直拿到同一个坏地址。同一次解析只处理一次。
+    let refused = false
+    const onRefused = () => {
+      if (refused) return
+      refused = true
+      const forgotten = ctx.ytdlp.forget(`https://www.youtube.com/watch?v=${request.video}`)
+      ctx.log.warn('上游拒了解析出的地址，丢掉缓存', { video: request.video, exit: exit?.url ?? 'default', forgotten })
+    }
     const duration = info.duration ?? 0
     const subtitles = this.subtitles(info, ctx, duration, dispatcher)
     const renditions: SubtitleRendition[] = subtitles.map((track) => track.rendition)
@@ -128,7 +137,7 @@ export class YouTubePlayback {
         ?? info.formats.find((f) => f.protocol === 'm3u8_native')?.url
       if (!manifest) throw new SourceError('unplayable', '这个直播没有可播放的流')
       live = true
-      streams.push({ id: 'live', url: ctx.media.proxy(manifest, { playlist: 'yes', name: 'live.m3u8', ttl: 6 * 3600, dispatcher }), format: 'hls', quality: { rank: 1080, label: '直播' }, description: 'youtube live hls' })
+      streams.push({ id: 'live', url: ctx.media.proxy(manifest, { playlist: 'yes', name: 'live.m3u8', ttl: 6 * 3600, dispatcher, onRefused }), format: 'hls', quality: { rank: 1080, label: '直播' }, description: 'youtube live hls' })
     } else {
       const videos = videoLadder(info.formats)
       const audios = audioTracks(info.formats)
@@ -145,7 +154,7 @@ export class YouTubePlayback {
         if (request.preferences?.adaptive) {
           streams.push({
             id: `auto-${audio.language ?? 'und'}`,
-            url: ctx.media.dash({ videos: videos.map(dashVideo), audios: [dashAudio(audio, true)], subtitles: renditions }, { via, ttl: 5 * 3600, dispatcher }),
+            url: ctx.media.dash({ videos: videos.map(dashVideo), audios: [dashAudio(audio, true)], subtitles: renditions }, { via, ttl: 5 * 3600, dispatcher, onRefused }),
             format: 'hls',
             quality: { rank: videos[0].height ?? 0, label: '自动' },
             language,
@@ -156,7 +165,7 @@ export class YouTubePlayback {
         for (const video of videos.filter((v) => QUALITIES.includes(v.height ?? 0) || v === videos[0])) {
           streams.push({
             id: `${video.height}-${audio.language ?? 'und'}`,
-            url: ctx.media.dash({ videos: [dashVideo(video)], audios: [dashAudio(audio, true)], subtitles: renditions }, { via, ttl: 5 * 3600, dispatcher }),
+            url: ctx.media.dash({ videos: [dashVideo(video)], audios: [dashAudio(audio, true)], subtitles: renditions }, { via, ttl: 5 * 3600, dispatcher, onRefused }),
             format: 'hls',
             quality: { rank: video.height ?? 0, label: `${video.height}P` },
             language,
