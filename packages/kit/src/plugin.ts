@@ -38,6 +38,7 @@ import type {
   VideoActionState,
   WebLogin,
 } from '@iyt-source/protocol'
+import type { ExitPool } from './exits.ts'
 import type { MediaGateway } from './media.ts'
 import type { KeyValueStore } from './store.ts'
 import type { YtDlp } from './ytdlp.ts'
@@ -57,6 +58,8 @@ export interface Ctx {
   /** 注册需要服务端提供的媒体（文件、代理、生成的播放列表），得到 App 能直接请求的地址。 */
   media: MediaGateway
   ytdlp: YtDlp
+  /** 按用途的上游出口（SERVER.md §18）：平台按 IP 限流时换出口。没配时请求照旧走全局代理。 */
+  exits: ExitPool
   log: Logger
   /** 请求被客户端取消时触发；插件发起的上游请求应带上它。 */
   signal: AbortSignal

@@ -1,3 +1,4 @@
+import type { ExitPool } from './exits.ts'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -25,7 +26,7 @@ const STATIC: Record<string, string> = { 'app.js': 'text/javascript; charset=utf
  * 调试页（不属于协议，SERVER.md §11.5）：`/debug`。和协议接口一样只对局域网开放。
  * 页面（Vue 3 免构建版，`debug/` 下的 index.html / app.js / app.css）直接调用协议接口；这里只补二维码、请求日志和三方库。
  */
-export function registerDebug(app: FastifyInstance, options: { requestLog: RequestLog }): void {
+export function registerDebug(app: FastifyInstance, options: { requestLog: RequestLog; exits?: ExitPool }): void {
   const page = join(here, 'debug', 'index.html')
   const vendor: Record<string, string | undefined> = {
     'hls.js': vendorPath('hls.js', 'dist/hls.min.js'),
@@ -58,6 +59,9 @@ export function registerDebug(app: FastifyInstance, options: { requestLog: Reque
   })
 
   app.get('/debug/api/log', async () => options.requestLog.recent())
+
+  // 出口池的状态（SERVER.md §18）：每个用途的出口、冷却到几点、最近一次被限的原因。
+  app.get('/debug/api/exits', async () => options.exits?.status() ?? {})
 
   app.get('/debug/api/qr', async (request, reply) => {
     const text = (request.query as { text?: string }).text ?? ''

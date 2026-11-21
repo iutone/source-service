@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "tvPage": "https://www.youtube.com/tv",
+  "pageClient": "TV",
+  "accountClient": "TV",
+  "playerClients": [
+    "TV_DOWNGRADED",
+    "TV_DOWNGRADED_2"
+  ],
+  "sabrClients": [
+    "WEB_SAFARI"
+  ],
+  "oauth": {
+    "clientID": "861556708454-d6dlm3lh05idd8npek18k6be8ba3oc68.apps.googleusercontent.com",
+    "clientSecret": "SboVhoG9s0rNafixCSGGKXAT",
+    "scope": "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube-paid-content",
+    "deviceModel": "ytlr::"
+  },
+  "clients": {
+    "TV": {
+      "name": "TVHTML5",
+      "version": "7.20260901.15.00",
+      "nameID": 7,
+      "userAgent": "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
+      "referer": "https://www.youtube.com/tv",
+      "acceptsAuthorization": true
+    },
+    "TV_DOWNGRADED": {
+      "name": "TVHTML5",
+      "version": "5.20260901",
+      "nameID": 7,
+      "userAgent": "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1",
+      "referer": "https://www.youtube.com/tv",
+      "acceptsAuthorization": true
+    },
+    "TV_DOWNGRADED_2": {
+      "name": "TVHTML5",
+      "version": "5.20260114",
+      "nameID": 7,
+      "userAgent": "Mozilla/5.0 (DirectFB; Linux x86_64) Cobalt/4.13031-qa (unlike Gecko) Starboard/1",
+      "referer": "https://www.youtube.com/tv",
+      "acceptsAuthorization": true
+    },
+    "WEB_SAFARI": {
+      "name": "WEB",
+      "version": "2.20260907.06.00",
+      "nameID": 1,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)",
+      "referer": "https://www.youtube.com/",
+      "acceptsAuthorization": false,
+      "context": {
+        "browserName": "Safari",
+        "browserVersion": "15.5",
+        "osName": "Macintosh",
+        "osVersion": "10_15_7"
+      }
+    }
+  }
+}

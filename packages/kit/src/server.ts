@@ -19,6 +19,7 @@ import {
 import { badRequest, notFound, SourceError, toSourceError } from './errors.ts'
 import { isAllowedHost, isLocalAddress } from './lan.ts'
 import { LoginSessions } from './login.ts'
+import { ExitPool } from './exits.ts'
 import { MediaGateway, contentTypeOf, serveFile } from './media.ts'
 import type { Ctx, Logger, SourcePlugin } from './plugin.ts'
 import { RequestLog } from './requestLog.ts'
@@ -33,6 +34,8 @@ export interface ServerOptions {
   version?: string
   allowedHosts?: string[]
   ytdlp?: YtDlp
+  /** 按用途的上游出口（SERVER.md §18）。 */
+  exits?: ExitPool
   /** 只接受局域网对端（SERVER.md §2.3）；测试里可关。 */
   localNetworkOnly?: boolean
   /** 调试页 `/debug`；默认开。 */
@@ -77,6 +80,7 @@ function disconnectSignal(request: FastifyRequest): AbortSignal {
 export async function createServer(options: ServerOptions): Promise<SourceServer> {
   const serverId = loadServerId(options.dataDir)
   const ytdlp = options.ytdlp ?? new YtDlp()
+  const exits = options.exits ?? ExitPool.none()
   const media = new MediaGateway({ secret: serverId, persistent: new KeyValueStore(join(options.dataDir, 'media')) })
   const logins = new LoginSessions()
   const requestLog = new RequestLog()
@@ -163,7 +167,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   }
 
   function context(request: FastifyRequest, entry: ReturnType<typeof source>, signal?: AbortSignal): Ctx {
-    return { sourceId: entry.id, store: entry.store, media, ytdlp, log: entry.log, signal: signal ?? disconnectSignal(request) }
+    return { sourceId: entry.id, store: entry.store, media, ytdlp, exits, log: entry.log, signal: signal ?? disconnectSignal(request) }
   }
 
   const query = (request: FastifyRequest) => request.query as Record<string, string | undefined>
@@ -581,7 +585,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   app.get(`${P}/media/:token/*`, mediaRoute)
   app.head(`${P}/media/:token/*`, mediaRoute)
 
-  if (options.debug !== false) registerDebug(app, { requestLog })
+  if (options.debug !== false) registerDebug(app, { requestLog, exits })
 
   return {
     app,

@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Agent, EnvHttpProxyAgent, setGlobalDispatcher } from 'undici'
-import { advertise, createServer, YtDlp, type Logger } from '@iyt-source/kit'
+import { Agent, EnvHttpProxyAgent, ProxyAgent, setGlobalDispatcher } from 'undici'
+import { advertise, createServer, ExitPool, YtDlp, type Logger } from '@iyt-source/kit'
 import { check } from './check.ts'
 import { loadConfig } from './config.ts'
 import { loadPlugin, pluginsDir } from './plugins.ts'
@@ -38,6 +38,14 @@ async function serve(args: string[]) {
       log.error(`源 ${source.id}（${source.plugin}）加载失败`, { error: String(error) })
     }
   }
+  // 每个出口一个代理 agent（同一地址在几个用途里共用一个）。
+  const agents = new Map<string, ProxyAgent>()
+  const pools = Object.fromEntries(Object.entries(config.exits?.pools ?? {}).map(([purpose, urls]) => [purpose, (urls ?? []).map((url) => {
+    if (!agents.has(url)) agents.set(url, new ProxyAgent({ uri: url, maxHeaderSize }))
+    return { url, dispatcher: agents.get(url) }
+  })]))
+  const exits = new ExitPool({ pools, cooldownMs: (config.exits?.cooldownMinutes ?? 30) * 60_000, log })
+  if (agents.size > 0) log.info('出口池', { pools: Object.fromEntries(Object.entries(pools).map(([p, list]) => [p, list.map((e) => e.url)])) })
   const ytdlp = new YtDlp({ binary: config.ytdlp?.path, updateCommand: config.ytdlp?.update, args: config.ytdlp?.args })
   const server = await createServer({
     name: config.name,
@@ -46,6 +54,7 @@ async function serve(args: string[]) {
     version,
     allowedHosts: config.allowedHosts,
     ytdlp,
+    exits,
     debug: config.debug,
     localNetworkOnly: process.env.IYT_ALLOW_ANY_PEER !== '1',
     logger: process.env.IYT_LOG_REQUESTS === '1',

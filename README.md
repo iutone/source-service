@@ -83,7 +83,7 @@ name: 客厅 NAS              # App 里显示的服务名
 port: 8090
 sources:
   - id: youtube
-    plugin: ./repo/source-plugins/youtube              # 相对数据目录；镜像不带平台的源
+    plugin: /app/plugins/youtube                       # 镜像自带，配置里加上才启用
     options: { language: zh-CN }
   # 可选：本地视频目录（要先挂载视频目录）。一级目录是频道，频道下的目录是节目
   # - id: videos
@@ -91,8 +91,8 @@ sources:
   #   options: { path: /media/videos, name: 本地视频 }
 ```
 
-镜像里只有示例源 `folder`。平台的源（比如 YouTube）是单独的插件，放进数据目录、在配置里写路径加载；插件
-`import` 的 `@iyt-source/kit`、`@iyt-source/protocol` 链接到镜像里的 `/app/packages/kit`、`/app/packages/protocol`。
+镜像里带示例源 `folder` 和 YouTube 插件（`/app/plugins/youtube`），默认配置一个源也不启用，在 `sources` 里加上才有。
+其他平台的源是单独的插件，可以放进数据目录、在配置里写路径加载，或 `iyt-source plugins add` 装进 `/data/plugins`。
 
 ### 检查
 

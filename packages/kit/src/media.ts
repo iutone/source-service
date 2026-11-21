@@ -26,6 +26,7 @@ type Entry =
       url: string
       headers: Record<string, string>
       playlist: 'auto' | 'yes' | 'no'
+      dispatcher?: unknown
       expires: number
       children: string[]
       childIndex: Map<string, number>
@@ -37,13 +38,14 @@ type Entry =
       subtitles: SubtitleRendition[]
       headers: Record<string, string>
       via: 'direct' | 'proxy'
+      dispatcher?: unknown
       expires: number
       children: string[]
       childIndex: Map<string, number>
       indexes: Map<string, Promise<SegmentIndex>>
     }
 
-type Children = { children: string[]; childIndex: Map<string, number> }
+type Children = { children: string[]; childIndex: Map<string, number>; dispatcher?: unknown }
 
 export interface MediaOptions {
   /** 有效期，秒；默认 6 小时。 */
@@ -128,7 +130,11 @@ export class MediaGateway {
   /**
    * 代理上游地址。`playlist`：`auto` 按响应的 Content-Type 和内容判断是不是 HLS。
    */
-  proxy(url: string, options: MediaOptions & { headers?: Record<string, string>; playlist?: 'auto' | 'yes' | 'no' } = {}): string {
+  /**
+   * - Parameter dispatcher: 上游请求走的出口（出口池的，SERVER.md §18）；省略走全局代理。地址绑了解析时出口 IP 的
+   *   （YouTube 的 googlevideo）必须和解析时同一个出口。
+   */
+  proxy(url: string, options: MediaOptions & { headers?: Record<string, string>; playlist?: 'auto' | 'yes' | 'no'; dispatcher?: unknown } = {}): string {
     const name = options.name ?? (basename(new URL(url).pathname) || 'media')
     return this.add(
       {
@@ -136,6 +142,7 @@ export class MediaGateway {
         url,
         headers: options.headers ?? {},
         playlist: options.playlist ?? 'auto',
+        dispatcher: options.dispatcher,
         expires: this.expiry(options),
         children: [],
         childIndex: new Map(),
@@ -148,7 +155,7 @@ export class MediaGateway {
    * 音视频分开的单文件 DASH 轨道（YouTube 的 https 格式），返回 master 地址。分段索引在播放器第一次请求时读取。
    * - Parameter via: `direct` 分片地址直接给 CDN（App 和服务同一出口时可用，省 NAS 带宽）；`proxy` 经网关转发。
    */
-  dash(tracks: { videos: DashVideoTrack[]; audios: DashAudioTrack[]; subtitles?: SubtitleRendition[] }, options: MediaOptions & { headers?: Record<string, string>; via?: 'direct' | 'proxy' } = {}): string {
+  dash(tracks: { videos: DashVideoTrack[]; audios: DashAudioTrack[]; subtitles?: SubtitleRendition[] }, options: MediaOptions & { headers?: Record<string, string>; via?: 'direct' | 'proxy'; dispatcher?: unknown } = {}): string {
     if (tracks.videos.length === 0) throw new SourceError('unplayable', '没有可播放的视频轨')
     return this.add(
       {
@@ -158,6 +165,7 @@ export class MediaGateway {
         subtitles: tracks.subtitles ?? [],
         headers: options.headers ?? {},
         via: options.via ?? 'proxy',
+        dispatcher: options.dispatcher,
         expires: this.expiry(options),
         children: [],
         childIndex: new Map(),
@@ -217,7 +225,7 @@ export class MediaGateway {
     if (!source) throw new SourceError('not_found', '找不到这条轨道')
     let index = entry.indexes.get(source.url)
     if (!index) {
-      index = readSegmentIndex((start, end) => fetchRange(source.url, entry.headers, start, end))
+      index = readSegmentIndex((start, end) => fetchRange(source.url, entry.headers, start, end, entry.dispatcher))
       entry.indexes.set(source.url, index)
       index.catch(() => entry.indexes.delete(source.url))
     }
@@ -248,7 +256,8 @@ export class MediaGateway {
     })
     let upstream: Response
     try {
-      upstream = await fetch(url, { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers, redirect: 'follow', signal: controller.signal })
+      upstream = await fetch(url, { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers, redirect: 'follow', signal: controller.signal,
+                                    dispatcher: entry.dispatcher } as RequestInit)
     } catch (error) {
       throw new SourceError('unavailable', '上游连不上', { cause: error, retryable: true })
     }
@@ -367,8 +376,9 @@ export function parseRange(header: string | string[] | undefined, size: number):
 }
 
 /** 读上游的一段字节（含两端）。 */
-export async function fetchRange(url: string, headers: Record<string, string>, start: number, end: number): Promise<Uint8Array> {
-  const response = await fetch(url, { headers: { ...headers, range: `bytes=${start}-${end}` } })
+export async function fetchRange(url: string, headers: Record<string, string>, start: number, end: number,
+                                 dispatcher?: unknown): Promise<Uint8Array> {
+  const response = await fetch(url, { headers: { ...headers, range: `bytes=${start}-${end}` }, dispatcher } as RequestInit)
   if (response.status === 416) return new Uint8Array()
   if (response.status === 403 || response.status === 410) throw new SourceError('unplayable', '上游拒绝了这个地址，请重新解析', { retryable: true })
   if (!response.ok) throw new SourceError('unavailable', `上游返回 ${response.status}`, { retryable: true })

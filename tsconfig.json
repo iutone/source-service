@@ -18,5 +18,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["packages/*/src", "packages/*/test", "sources/*/src", "sources/*/test", "scripts"]
+  "include": ["packages/*/src", "packages/*/test", "sources/*/src", "sources/*/test", "plugins/*/src", "plugins/*/test", "plugins/*/rules", "scripts"]
 }

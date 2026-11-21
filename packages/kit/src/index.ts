@@ -1,5 +1,6 @@
 export * from './dash.ts'
 export * from './errors.ts'
+export * from './exits.ts'
 export * from './hls.ts'
 export * from './lan.ts'
 export * from './login.ts'

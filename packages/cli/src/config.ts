@@ -17,6 +17,11 @@ export interface Config {
   bonjour: boolean
   debug: boolean
   ytdlp?: { path?: string; update?: string[]; args?: string[] }
+  /**
+   * 按用途的上游代理出口（SERVER.md §18）：`pools` 里每个用途一组代理地址，按顺序用，被平台限流的冷却
+   * `cooldownMinutes` 分钟后再用。
+   */
+  exits?: { cooldownMinutes?: number; pools?: Record<string, string[]> }
   sources: SourceConfig[]
   /** 配置文件所在目录之外的数据目录（server.json、各源存储、插件）。 */
   dataDir: string
@@ -51,6 +56,7 @@ export function loadConfig(path?: string): { config: Config; path: string; creat
     bonjour: raw.bonjour ?? true,
     debug: raw.debug ?? true,
     ytdlp: raw.ytdlp,
+    exits: raw.exits,
     sources: (raw.sources ?? []).map((source) => {
       if (!source?.id || !source?.plugin) throw new Error(`${file}：每个源都要有 id 和 plugin`)
       // 以 ./ ../ 开头的 plugin 是本地目录（相对配置文件）。

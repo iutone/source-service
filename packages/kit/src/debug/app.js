@@ -886,14 +886,27 @@ const ConsoleView = {
 }
 
 const LogView = {
-  template: `<div><h1 class="page-title">请求日志</h1><p class="muted">最近 300 条，每 3 秒刷新（调试页自己的请求不记）</p>
+  template: `<div><template v-if="exitRows.length"><h1 class="page-title">出口</h1>
+    <p class="muted">按用途的上游代理出口：被平台限流的冷却后换下一个（SERVER.md §18）</p>
+    <table><tr><th>用途</th><th>出口</th><th>状态</th><th>被限次数</th><th>最近一次被限</th><th>最近成功</th></tr>
+      <tr v-for="e in exitRows" :key="e.purpose + e.url"><td>{{ e.purpose }}</td><td class="mono">{{ e.url }}</td>
+        <td :class="{ error: e.coolingUntil }">{{ e.coolingUntil ? '冷却到 ' + new Date(e.coolingUntil).toLocaleTimeString() : '可用' }}</td>
+        <td>{{ e.limited }}</td><td>{{ e.lastFailureAt ? new Date(e.lastFailureAt).toLocaleTimeString() + ' ' + e.lastFailure : '' }}</td>
+        <td class="muted">{{ e.lastSuccessAt ? new Date(e.lastSuccessAt).toLocaleTimeString() : '' }}</td></tr></table></template>
+    <h1 class="page-title">请求日志</h1><p class="muted">最近 300 条，每 3 秒刷新（调试页自己的请求不记）</p>
     <table><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>耗时</th><th>错误</th><th>对端</th></tr>
       <tr v-for="(r, i) in records" :key="i"><td>{{ new Date(r.at).toLocaleTimeString() }}</td><td>{{ r.method }}</td><td class="mono" style="word-break:break-all">{{ r.path }}</td>
         <td :class="{ error: r.status >= 400 }">{{ r.status }}</td><td>{{ r.ms }} ms</td><td>{{ r.errorCode ? r.errorCode + '：' + r.errorMessage : '' }}</td><td class="muted">{{ r.peer }}</td></tr></table></div>`,
-  data: () => ({ records: [] }),
+  data: () => ({ records: [], exits: {} }),
+  computed: {
+    exitRows() {
+      return Object.entries(this.exits).flatMap(([purpose, list]) => list.map((e) => ({ purpose, ...e })))
+    },
+  },
   mounted() {
     const refresh = async () => {
       this.records = await api('/debug/api/log', { quiet: true }).catch(() => this.records)
+      this.exits = await api('/debug/api/exits', { quiet: true }).catch(() => this.exits)
       this.timer = setTimeout(refresh, 3000)
     }
     refresh()
