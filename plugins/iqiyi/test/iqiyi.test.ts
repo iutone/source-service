@@ -27,16 +27,20 @@ describe('签名', () => {
     })).toBe('E76C99399158DFFB3BA6594D74C2457E')
   })
 
-  it('能力位照 Safari：不声明 Widevine，FairPlay 位只在要的时候', () => {
+  it('能力位：FairPlay 照 Safari，Widevine 照 Chrome，都不要时两种都不声明', () => {
     const bits = (value: string | undefined) => {
       const n = BigInt(value ?? '0')
       return Array.from({ length: 64 }, (_, i) => i + 1).filter((b) => (n >> BigInt(b - 1)) & 1n)
     }
-    const withFP = Object.fromEntries(capabilities(true))
-    const without = Object.fromEntries(capabilities(false))
+    const withFP = Object.fromEntries(capabilities('fairplay'))
+    const without = Object.fromEntries(capabilities('none'))
     expect(bits(withFP.k_ft1)).toEqual([3, 40, 48, 50])
     expect(bits(withFP.k_ft4)).toEqual(expect.arrayContaining([10, 11, 12, 29]))
     expect(bits(without.k_ft4).filter((b) => [10, 11, 12, 29, 20, 21].includes(b))).toEqual([])
+    const wv = Object.fromEntries(capabilities('widevine'))
+    expect(bits(wv.k_ft1)).toEqual([3, 40, 42, 48, 50])
+    expect(bits(wv.k_ft4)).toEqual([3, 14, 20, 21, 27, 38, 44, 46, 51])
+    expect(bits(wv.k_ft7)).toEqual([3, 26, 29, 36, 44, 45])
   })
 
   it('dash 地址的 vf 对路径和参数原文算', () => {
@@ -209,6 +213,7 @@ describe('播放', () => {
     expect(unavailable(parseDash(answer([], 110)), false).code).toBe('restricted')
     expect(unavailable(parseDash(answer([], 502)), false).message).toContain('VIP')
     expect(unavailable(parseDash(answer([], 300)), true).code).toBe('unplayable')
+    expect(unavailable(parseDash(answer([], 702)), true).message).toContain('加密')
     expect(() => parseDash({ code: 'A00111' })).toThrow(/中国大陆/)
   })
 

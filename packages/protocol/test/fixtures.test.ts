@@ -49,7 +49,7 @@ describe('fixtures', async () => {
     const covered = new Set(index.map((entry) => `${entry.method} ${entry.path.split('?')[0].replace('/sources/sample', '/sources/:source').replace(/\/login\/\{loginId\}$/, '/login/:loginId').replace(/\/subtitles\/[^/]+\/[^/]+$/, '/subtitles/:ref/:key')}`))
     // 不需要 fixture 的：写操作的同类、资源与媒体文件。
     // 原始字节的路由（不是 JSON）：资源、媒体、FairPlay 证书和许可（kit 的 fairplay.test.ts 测）。
-    const exempt = ['/assets/:name', '/media/:token/*', '/fairplay/:ref/cert', '/fairplay/:ref/license', '/login/:loginId/cancel', '/actions/dislike', '/actions/coins', '/actions/follow', '/history/clear', 'POST /iyt/v1/sources/:source/actions/favorites']
+    const exempt = ['/assets/:name', '/media/:token/*', '/fairplay/:ref/cert', '/fairplay/:ref/license', '/drm/:system/:ref/cert', '/drm/:system/:ref/license', '/login/:loginId/cancel', '/actions/dislike', '/actions/coins', '/actions/follow', '/history/clear', 'POST /iyt/v1/sources/:source/actions/favorites']
     const missing = routes
       .filter((route) => route.includes('/iyt/v1/'))
       .filter((route) => !covered.has(route) && !exempt.some((suffix) => route.endsWith(suffix)))

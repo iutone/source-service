@@ -11,6 +11,8 @@ import type {
   Danmaku,
   EpisodeList,
   EpisodeRange,
+  DrmEndpoints,
+  DrmSystem,
   FairPlayEndpoints,
   FavoriteFolder,
   FeedPage,
@@ -158,19 +160,29 @@ export interface LinksModule {
 }
 
 /**
- * FairPlay 许可转发（SERVER.md §6.4）：解密在 Apple 设备上做，服务端只按平台要求转发证书和许可请求，带上服务端持有的登录态。
- * `ref` 是插件在 `fairPlayEndpoints(ref)` 里给的不透明串（一般编码视频 id、清晰度、平台的许可地址等，插件自己解释）。
+ * DRM 许可转发（SERVER.md §6.4）：解密在客户端做，服务端只按平台要求转发证书和许可请求，带上服务端持有的登录态。
+ * `ref` 是插件在 `drmEndpoints` / `fairPlayEndpoints` 里给的不透明串（插件自己解释）；同一个 ref 可以用于几种 DRM。
  */
+export interface DrmModule {
+  /** 能转发的 DRM。 */
+  systems: DrmSystem[]
+  /** FairPlay 的证书原始字节（DER）。 */
+  certificate?(system: DrmSystem, ref: string, ctx: Ctx): Promise<Uint8Array>
+  /** 客户端发来的许可请求原始字节（FairPlay 的 SPC / Widevine 的 challenge）→ 平台给的许可原始字节（CKC / license）。 */
+  license(system: DrmSystem, ref: string, request: Uint8Array, ctx: Ctx): Promise<Uint8Array>
+}
+
+/** 旧的 FairPlay 模块（只有 FairPlay 的插件仍可用它；新插件用 `drm`）。 */
 export interface FairPlayModule {
-  /** 证书的原始字节（DER）。 */
   certificate(ref: string, ctx: Ctx): Promise<Uint8Array>
-  /** App 发来的 SPC 原始字节 → 平台给的 CKC 原始字节。 */
   license(ref: string, spc: Uint8Array, ctx: Ctx): Promise<Uint8Array>
 }
 
 export interface PlaybackModule {
   resolve(request: ResolveRequest, ctx: Ctx): Promise<PlaybackMedia>
-  /** 有这个模块，manifest 的 `features.fairPlay` 就是 true，流可以带 `fairPlay`（用 `fairPlayEndpoints` 生成）。 */
+  /** DRM 许可转发：manifest 的 `features.drm` 列出 `systems`；流用 `drmEndpoints` 带上 `drm` / `fairPlay`。 */
+  drm?: DrmModule
+  /** 旧的 FairPlay 模块，等于 `drm: { systems: ['fairplay'] }`。 */
   fairPlay?: FairPlayModule
   progress?(request: ProgressRequest, ctx: Ctx): Promise<void>
   /** `subtitles[].cues` 指向 `/iyt/v1/sources/<id>/subtitles/<ref>/<key>`，由这里给出原文。 */
@@ -205,4 +217,22 @@ export type SourceFactory = (options: Record<string, unknown>, env: { dataDir: s
 export function fairPlayEndpoints(sourceId: string, ref: string): FairPlayEndpoints {
   const base = `${BASE_PATH}/sources/${sourceId}/fairplay/${encodeURIComponent(ref)}`
   return { certificate: `${base}/cert`, license: `${base}/license` }
+}
+
+/**
+ * 一条加密流的 `drm`（和旧字段 `fairPlay`）：按 `systems` 给出各 DRM 的许可地址（服务端路由 `drm/<system>/<ref>/…`）。
+ * 用法：`{ ...stream, ...drmEndpoints(ctx.sourceId, ref, ['fairplay', 'widevine']) }`。
+ */
+export function drmEndpoints(sourceId: string, ref: string, systems: DrmSystem[]): { drm: DrmEndpoints[]; fairPlay?: FairPlayEndpoints } {
+  const base = (system: DrmSystem) => `${BASE_PATH}/sources/${sourceId}/drm/${system}/${encodeURIComponent(ref)}`
+  const drm = systems.map((system): DrmEndpoints => system === 'fairplay'
+    ? { system, certificate: `${base(system)}/cert`, license: `${base(system)}/license` }
+    : { system, license: `${base(system)}/license` })
+  const fairPlay = drm.find((d) => d.system === 'fairplay')
+  return { drm, fairPlay: fairPlay ? { certificate: fairPlay.certificate!, license: fairPlay.license } : undefined }
+}
+
+/** 客户端能用的 DRM（`preferences.drm`）：缺省是旧 App，当 FairPlay。 */
+export function clientDrm(request: { preferences?: { drm?: DrmSystem[] | null } }): DrmSystem[] {
+  return request.preferences?.drm ?? ['fairplay']
 }

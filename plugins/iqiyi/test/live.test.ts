@@ -115,10 +115,10 @@ describe.skipIf(!live || !cookie)('爱奇艺 live（登录）', () => {
   }, 120_000)
 })
 
-// 加密片（FairPlay）：要中国大陆出口（境外出口 `dash` 回 502）。IQIYI_FAIRPLAY=1 IQIYI_COOKIE=… 时跑；
+// 加密片（FairPlay、Widevine）：要中国大陆出口（境外出口 `dash` 回 502）。IQIYI_FAIRPLAY=1 IQIYI_COOKIE=… 时跑；
 // 非会员拿到的是 6 分钟试看，许可用伪造的 SPC 打，应得到平台的拒绝（restricted）。
 describe.skipIf(!live || !cookie || process.env.IQIYI_FAIRPLAY !== '1')('爱奇艺 live（FairPlay）', () => {
-  it('《疯狂动物城》给出带 fairPlay 的流、证书、平台对伪造 SPC 的拒绝', async () => {
+  it('《疯狂动物城》：FairPlay / Widevine 的流、证书、平台对伪造 SPC / challenge 的拒绝、不支持 DRM 时不可用', async () => {
     const store = new KeyValueStore(mkdtempSync(join(tmpdir(), 'iyt-iqiyi-fp-')))
     store.set('credential', { cookies: cookies(cookie!) })
     const media = new MediaGateway()
@@ -127,9 +127,16 @@ describe.skipIf(!live || !cookie || process.env.IQIYI_FAIRPLAY !== '1')('爱奇�
     const result = await plugin.playback.resolve({ video: 'v481997300', preferences: {} }, ctx)
     const stream = result.streams.find((s) => s.fairPlay && !s.unavailableReason)
     expect(stream?.keepable).toBe(false)
-    const ref = decodeURIComponent(stream!.fairPlay!.certificate.split('/')[6])
-    expect((await plugin.playback.fairPlay!.certificate(ref, ctx)).length).toBe(1295)
-    await expect(plugin.playback.fairPlay!.license(ref, new Uint8Array(2048).fill(1), ctx)).rejects.toMatchObject({ code: 'restricted' })
+    const ref = decodeURIComponent(stream!.fairPlay!.certificate.split('/').at(-2)!)
+    expect((await plugin.playback.drm!.certificate!('fairplay', ref, ctx)).length).toBe(1295)
+    await expect(plugin.playback.drm!.license('fairplay', ref, new Uint8Array(2048).fill(1), ctx)).rejects.toMatchObject({ code: 'restricted' })
+    // Widevine（安卓）：同一部片给 Widevine 的流，伪造的 challenge 被拒。
+    const android = await plugin.playback.resolve({ video: 'v481997300', preferences: { drm: ['widevine'] } }, ctx)
+    const widevine = android.streams.find((s) => s.drm?.some((d) => d.system === 'widevine') && !s.unavailableReason)
+    expect(widevine?.fairPlay).toBeUndefined()
+    await expect(plugin.playback.drm!.license('widevine', ref, new Uint8Array(300).fill(8), ctx)).rejects.toMatchObject({ code: 'restricted' })
+    // 什么 DRM 都不能用：加密档都不可用。
+    await expect(plugin.playback.resolve({ video: 'v481997300', preferences: { drm: [] } }, ctx)).rejects.toMatchObject({ code: 'unplayable' })
     media.close()
   }, 90_000)
 })

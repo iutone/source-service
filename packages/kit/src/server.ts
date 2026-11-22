@@ -15,6 +15,7 @@ import {
   type ResolveRequest,
   type SourceManifest,
   type SourceVisibility,
+  type DrmSystem,
   type Target,
 } from '@iyt-source/protocol'
 import { badRequest, notFound, SourceError, toSourceError } from './errors.ts'
@@ -22,7 +23,7 @@ import { isAllowedHost, isLocalAddress } from './lan.ts'
 import { LoginSessions } from './login.ts'
 import { ExitPool } from './exits.ts'
 import { MediaGateway, contentTypeOf, serveFile } from './media.ts'
-import type { Ctx, Logger, SourcePlugin } from './plugin.ts'
+import type { Ctx, DrmModule, Logger, SourcePlugin } from './plugin.ts'
 import { RequestLog } from './requestLog.ts'
 import { KeyValueStore } from './store.ts'
 import { YtDlp } from './ytdlp.ts'
@@ -89,7 +90,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   const logins = new LoginSessions()
   const requestLog = new RequestLog()
   // maxParamLength：FairPlay 的 `ref`、字幕的 ref 等路径参数可能较长（Fastify 默认 100，超了回 414）。
-  const app = Fastify({ logger: options.logger ?? false, trustProxy: false, bodyLimit: 1 << 20, exposeHeadRoutes: false, maxParamLength: 2048 })
+  const app = Fastify({ logger: options.logger ?? false, trustProxy: false, bodyLimit: 1 << 20, exposeHeadRoutes: false, routerOptions: { maxParamLength: 2048 } })
 
   const routes: string[] = []
   app.addHook('onRoute', (route) => {
@@ -252,7 +253,8 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
       danmaku: plugin.danmaku ? { segmentDuration: plugin.danmaku.segmentDuration } : null,
       subtitles: Boolean(plugin.playback.cues),
       progress: Boolean(plugin.playback.progress),
-      fairPlay: Boolean(plugin.playback.fairPlay),
+      fairPlay: drmSystems(plugin).includes('fairplay'),
+      drm: drmSystems(plugin),
     }
     return {
       id,
@@ -571,24 +573,34 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     if (entry.plugin.playback.progress) await entry.plugin.playback.progress(input, context(request, entry))
     reply.code(204)
   })
-  // FairPlay 许可转发（§6.4）：证书原样给，SPC 原样收、CKC 原样回。
+  // DRM 许可转发（§6.4）：证书原样给，许可请求原样收、许可原样回。`/fairplay/<ref>/…` 是旧地址，等于 `/drm/fairplay/<ref>/…`。
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, payload, done) => done(null, payload))
-  app.get(`${S}/fairplay/:ref/cert`, async (request, reply) => {
+  const drmModule = (entry: ReturnType<typeof source>, system: string): DrmModule => {
+    const module = drmOf(entry.plugin)
+    if (!module || !module.systems.includes(system as DrmSystem)) throw new SourceError('not_found', `这个源不提供 ${system} 许可`)
+    return module
+  }
+  const certificate = async (request: FastifyRequest, reply: FastifyReply, system: string) => {
     const entry = source(request)
-    const fairPlay = requiredModule(entry.plugin.playback.fairPlay, 'FairPlay')
-    const bytes = await fairPlay.certificate((request.params as { ref: string }).ref, context(request, entry))
+    const module = drmModule(entry, system)
+    if (!module.certificate) throw new SourceError('not_found', `${system} 没有证书`)
+    const bytes = await module.certificate(system as DrmSystem, (request.params as { ref: string }).ref, context(request, entry))
     reply.header('content-type', 'application/octet-stream').header('cache-control', 'max-age=3600')
     return Buffer.from(bytes)
-  })
-  app.post(`${S}/fairplay/:ref/license`, async (request, reply) => {
+  }
+  const license = async (request: FastifyRequest, reply: FastifyReply, system: string) => {
     const entry = source(request)
-    const fairPlay = requiredModule(entry.plugin.playback.fairPlay, 'FairPlay')
-    const spc = request.body
-    if (!(spc instanceof Uint8Array) || spc.length === 0) throw badRequest('请求体应是 SPC 的原始字节（application/octet-stream）')
-    const ckc = await fairPlay.license((request.params as { ref: string }).ref, spc, context(request, entry))
+    const module = drmModule(entry, system)
+    const body = request.body
+    if (!(body instanceof Uint8Array) || body.length === 0) throw badRequest('请求体应是许可请求的原始字节（application/octet-stream）')
+    const bytes = await module.license(system as DrmSystem, (request.params as { ref: string }).ref, body, context(request, entry))
     reply.header('content-type', 'application/octet-stream').header('cache-control', 'no-store')
-    return Buffer.from(ckc)
-  })
+    return Buffer.from(bytes)
+  }
+  app.get(`${S}/drm/:system/:ref/cert`, async (request, reply) => certificate(request, reply, (request.params as { system: string }).system))
+  app.post(`${S}/drm/:system/:ref/license`, async (request, reply) => license(request, reply, (request.params as { system: string }).system))
+  app.get(`${S}/fairplay/:ref/cert`, async (request, reply) => certificate(request, reply, 'fairplay'))
+  app.post(`${S}/fairplay/:ref/license`, async (request, reply) => license(request, reply, 'fairplay'))
 
   app.get(`${S}/subtitles/:ref/:key`, async (request) => {
     const entry = source(request)
@@ -641,4 +653,21 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
       for (const { plugin } of sources.values()) await plugin.close?.()
     },
   }
+}
+
+/** 插件的 DRM 模块：新的 `drm`，或旧的 `fairPlay` 包成只有 fairplay 的。 */
+function drmOf(plugin: SourcePlugin): DrmModule | undefined {
+  const playback = plugin.playback
+  if (playback.drm) return playback.drm
+  const fairPlay = playback.fairPlay
+  if (!fairPlay) return undefined
+  return {
+    systems: ['fairplay'],
+    certificate: (_system, ref, ctx) => fairPlay.certificate(ref, ctx),
+    license: (_system, ref, request, ctx) => fairPlay.license(ref, request, ctx),
+  }
+}
+
+function drmSystems(plugin: SourcePlugin): DrmSystem[] {
+  return drmOf(plugin)?.systems ?? []
 }

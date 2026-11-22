@@ -1,11 +1,11 @@
 // IUTone 自建源：爱奇艺。照 App 的 `App/Core/IQiyi`（电视端的行为为准）移植：网页版（pcw）接口，扫码登录，凭证存服务端，
-// 全家共用。明文 HLS 的内联播放列表经媒体网关提供，分片 App 直连 CDN；FairPlay 片源的证书、许可经服务端转发。
+// 全家共用。明文 HLS 的内联播放列表经媒体网关提供，分片 App 直连 CDN；加密片源（FairPlay / Widevine）的证书、许可经服务端转发。
 // 随镜像发布在 /app/plugins/iqiyi，默认不启用：在 config.yaml 的 sources 里按路径加上。
 import { fileURLToPath } from 'node:url'
 import { type Ctx, type SourceFactory, type SourcePlugin } from '@iyt-source/kit'
 import { IQiyiComments } from './comments.ts'
 import { DANMAKU_SEGMENT, danmakuSegment } from './danmaku.ts'
-import { IQiyiFairPlay } from './fairplay.ts'
+import { IQiyiDrm } from './drm.ts'
 import { IQiyiDetail } from './detail.ts'
 import { FILTER_CATEGORIES, IQiyiFeed } from './feed.ts'
 import { IQiyiHistory } from './history.ts'
@@ -29,7 +29,7 @@ interface Services {
   history: IQiyiHistory
   comments: IQiyiComments
   playback: IQiyiPlayback
-  fairPlay: IQiyiFairPlay
+  drm: IQiyiDrm
 }
 
 export function createIQiyiSource(options: IQiyiOptions = {}): SourcePlugin {
@@ -47,7 +47,7 @@ export function createIQiyiSource(options: IQiyiOptions = {}): SourcePlugin {
         history: new IQiyiHistory(session),
         comments: new IQiyiComments(session),
         playback,
-        fairPlay: new IQiyiFairPlay(session, playback),
+        drm: new IQiyiDrm(session, playback),
       }
     }
     return services
@@ -127,10 +127,11 @@ export function createIQiyiSource(options: IQiyiOptions = {}): SourcePlugin {
     playback: {
       resolve: (request, ctx) => use(ctx).playback.resolve(request, ctx),
       progress: (request, ctx) => use(ctx).playback.progress(request, ctx),
-      // 版权方要求加密的片源（迪士尼等）：证书和许可经服务端转发（SERVER.md §6.4）。
-      fairPlay: {
-        certificate: (ref, ctx) => use(ctx).fairPlay.certificate(ref),
-        license: (ref, spc, ctx) => use(ctx).fairPlay.license(ref, spc, ctx.signal),
+      // 版权方要求加密的片源（迪士尼等）：FairPlay / Widevine 的证书和许可经服务端转发（SERVER.md §6.4）。
+      drm: {
+        systems: IQiyiDrm.systems,
+        certificate: (system, ref, ctx) => use(ctx).drm.certificate(system, ref),
+        license: (system, ref, request, ctx) => use(ctx).drm.license(system, ref, request, ctx.signal),
       },
     },
 

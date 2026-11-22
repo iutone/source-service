@@ -7,8 +7,8 @@
 // 会员 4K（uhd / suhd，HEVC 10-bit，只有 TS）：另发一次声明 HEVC 的 proxyhttp（cKey 9.2），分片在服务端转封装成 fMP4
 // （`transmux.ts`），经网关给 App；列出但不自动选中，客户端说不能解 HEVC 时不能选。
 import type { Ctx } from '@iyt-source/kit'
-import { codecSupported, fairPlayEndpoints, rewritePlaylist, SourceError } from '@iyt-source/kit'
-import type { Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream } from '@iyt-source/protocol'
+import { clientDrm, codecSupported, drmEndpoints, rewritePlaylist, SourceError } from '@iyt-source/kit'
+import type { DrmSystem, Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream } from '@iyt-source/protocol'
 import { decryptVinfo, vinfoKey } from './cipher.ts'
 import { CKEY85_VERSION, CKEY92_APP_VERSION, CKEY92_VERSION, cKey85, cKey92 } from './ckey.ts'
 import {
@@ -21,6 +21,10 @@ import { parseID } from './ids.ts'
 import { arr, int, isObject, num, str, text } from './json.ts'
 import { encode, randomHex, withTimeout, type TencentSession } from './session.ts'
 import { hevcCodecString, transmuxAvailable, TransmuxPipeline, videoRange } from './transmux.ts'
+
+/** 播放请求的 DRM 能力位（API.md §4.2.1，网页播放器的 `RE`）：FairPlay 16（Safari）、Widevine 32（Chrome）。 */
+export const DRM_FAIRPLAY = 16
+export const DRM_WIDEVINE = 32
 
 /** 离结尾这么近的续播点算看完了，从头放。 */
 const FINISHED_MARGIN = 10
@@ -35,6 +39,9 @@ export interface PlaybackOptions {
 // MARK: 解析答复
 
 /** `em` 不是 0：网站的提示带码（`85.-3` / `85.-12` / `85.-16` 是 cKey 不对，80 地区版权……）。 */
+/** 对外声明的 DRM。Widevine 的许可格式确认之前不加入（SERVER.md §21）。 */
+export const TENCENT_DRM_SYSTEMS: DrmSystem[] = ['fairplay']
+
 export function checkInfo(info: any): void {
   const code = int(info?.em)
   if (!code) return
@@ -65,14 +72,24 @@ export function restriction(info: any): string | undefined {
   return '该集需要腾讯视频 VIP'
 }
 
-/** 一档是 FairPlay 加密的（`drm` 4；5 是 Widevine，从不要）。 */
+/** 一档是 FairPlay 加密的（`drm` 4：TS + SAMPLE-AES，Safari 的能力位答它）。 */
 export const isFairPlay = (format: any) => int(format?.drm) === 4
 
-/** FairPlay 的许可（API.md §4.2.1）：`vl.vi[0].ckc` 是「许可地址|证书地址」，key id 取许可地址的 `link_vid`（否则视频的 `lnk`）。 */
+/** 一档用的 DRM：`drm` 4 FairPlay（Safari 能力位），5 Widevine（Chrome 能力位，CENC fMP4）；其他是明文。 */
+export function formatSystem(format: any): DrmSystem | undefined {
+  const drm = int(format?.drm)
+  return drm === 4 ? 'fairplay' : drm === 5 ? 'widevine' : undefined
+}
+
+/**
+ * 加密档的许可（API.md §4.2.1）：`vl.vi[0].ckc` 是「许可地址|证书地址」。FairPlay 的在 `…/vod/fairplay/v1/getckc`，
+ * 带证书；Widevine 的在 `…/vod/widevine/v1/getlicense`，证书那半是空的。key id 取许可地址的 `link_vid`（否则视频的 `lnk`）。
+ */
 export interface TencentDRM {
+  system: DrmSystem
   licenseURL: string
-  certificateURL: string
-  /** 密钥 id：播放列表 `skd://` 的主机，也是许可请求的 `assetId`。 */
+  certificateURL?: string
+  /** 密钥 id：FairPlay 播放列表 `skd://` 的主机、许可请求的 `assetId`；Widevine PSSH 里的 content id。 */
   assetID: string
 }
 
@@ -80,32 +97,56 @@ export function drmOf(info: any): TencentDRM | undefined {
   const video = info?.vl?.vi?.[0] ?? {}
   const ckc = text(video.ckc)
   if (!ckc) return undefined
-  const at = ckc.indexOf('|')
-  if (at <= 0) return undefined
-  const licenseURL = ckc.slice(0, at)
-  const certificateURL = ckc.slice(at + 1)
+  const [licenseURL = '', certificateURL = ''] = ckc.split('|')
   let linked: string | undefined
+  let path: string
   try {
-    new URL(certificateURL)
-    linked = new URL(licenseURL).searchParams.get('link_vid') ?? undefined
+    const url = new URL(licenseURL)
+    path = url.pathname
+    linked = url.searchParams.get('link_vid') ?? undefined
   } catch {
     return undefined
   }
+  const system: DrmSystem = path.includes('/widevine/') ? 'widevine' : 'fairplay'
+  if (system === 'fairplay') {
+    try {
+      new URL(certificateURL)
+    } catch {
+      return undefined
+    }
+  }
   const assetID = linked || text(video.lnk)
-  return assetID ? { licenseURL, certificateURL, assetID } : undefined
+  return assetID ? { system, licenseURL, certificateURL: certificateURL || undefined, assetID } : undefined
 }
+
+/** 媒体播放列表里的密钥标签对应的 DRM（按 KEYFORMAT，不按平台）。 */
+export function playlistSystems(playlist: string): DrmSystem[] {
+  const systems: DrmSystem[] = []
+  const keys = playlist.split(/\r?\n/).filter((l) => l.startsWith('#EXT-X-KEY:') || l.startsWith('#EXT-X-SESSION-KEY:'))
+  if (keys.some((l) => /KEYFORMAT="com\.apple\.streamingkeydelivery"/i.test(l) || /URI="skd:\/\//.test(l))) systems.push('fairplay')
+  if (keys.some((l) => /KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/i.test(l))) systems.push('widevine')
+  return systems
+}
+
+export const systemName = (system: DrmSystem) => (system === 'fairplay' ? 'FairPlay' : 'Widevine')
 
 /** 许可请求体：`spc=<base64>&assetId=<key id>`（表单）。 */
 export function licenseBody(spc: Uint8Array, assetID: string): string {
   return `spc=${encode(Buffer.from(spc).toString('base64'))}&assetId=${encode(assetID)}`
 }
 
-/** 许可应答 `{"code":0,"ckc":"<base64>"}` → CKC；别的都是平台拒绝（`restricted`）。 */
+/**
+ * 许可应答 `{"code":0,"ckc":"<base64>"}` → 许可（FairPlay 的 CKC、Widevine 的 license，都在 `ckc` 里）；code 不是 0 是平台拒绝
+ * （`restricted`）。Widevine 的应答也可能只给 `anc`（`{rc, aanc, anc}`，像 vinfo_proxy 的那样，给网页播放器自己的可信 JS 解，
+ * 这里打不开）：报 `upstream_changed`。
+ */
 export function ckcOf(answer: any): Uint8Array {
-  const encoded = int(answer?.code) === 0 ? text(answer?.ckc) : undefined
+  const code = int(answer?.code)
+  const encoded = code === 0 ? text(answer?.ckc) : undefined
   const ckc = encoded ? Buffer.from(encoded, 'base64') : undefined
-  if (!ckc?.length) throw new SourceError('restricted', `腾讯视频拒绝了播放许可：${text(answer?.msg) ?? 'FairPlay'}（${str(answer?.code) ?? '?'}）`)
-  return ckc
+  if (ckc?.length) return ckc
+  if (code === 0 && text(answer?.anc)) throw new SourceError('upstream_changed', '腾讯视频只给了封装过的许可（anc），这里还解不开')
+  throw new SourceError('restricted', `腾讯视频拒绝了播放许可：${text(answer?.msg) ?? 'DRM'}（${str(answer?.code) ?? '?'}）`)
 }
 
 /**
@@ -134,8 +175,14 @@ export function plain(info: any): any {
   return info
 }
 
-/** 只要 `video` 21 H.264：8（HEVC）、23（HEVC 10-bit）只有 TS 分片，AVPlayer 放不了；20 VVC 解不了。 */
-export const isPlayableCodec = (format: any) => (int(format?.video) ?? 21) === 21
+/**
+ * 只要 H.264：`video` 21（TS），以及 Widevine 档的 1（CENC fMP4，CODECS 是 avc1）。8（HEVC）、23（HEVC 10-bit）只有 TS 分片，
+ * AVPlayer 放不了；20 VVC 解不了。
+ */
+export const isPlayableCodec = (format: any) => {
+  const video = int(format?.video) ?? 21
+  return video === 21 || (video === 1 && formatSystem(format) === 'widevine')
+}
 
 /** `name`：hd 480P、shd 720P、fhd 1080P、uhd 4K；`hdr10` / `suhd`（臻彩）不要。协议的 rank 是像素高度。 */
 export function qualityRank(format: any): number | undefined {
@@ -223,8 +270,8 @@ export class TencentPlayback {
   private readonly history: TencentHistory
   private readonly via: 'direct' | 'proxy'
   private readonly pipeline = new TransmuxPipeline()
-  /** FairPlay 流的 ref → 这档的许可（播放时才取到地址的档，到时候才有）。服务重启后丢了就按 ref 里的视频重新要。 */
-  private readonly fairPlayRefs = new Map<string, { at: number; drm: () => Promise<TencentDRM> }>()
+  /** 加密流的 ref → 这档的许可（播放时才取到地址的档，到时候才有）。服务重启后丢了就按 ref 里的视频重新要。 */
+  private readonly drmRefs = new Map<string, { at: number; drm: () => Promise<TencentDRM> }>()
   private readonly certificates = new Map<string, Promise<Uint8Array>>()
   /** `vinfo_proxy` 的盐：已知的，解不开时换播放页上的。 */
   private salt = VINFO_SALT
@@ -254,26 +301,32 @@ export class TencentPlayback {
       await this.session.ensureMembership(signal)
     }
     const isVIP = this.session.isVIP
+    // 客户端能用的 DRM 决定按谁的能力位要：FairPlay（Safari，16）照旧；只会 Widevine（安卓，Chrome 的 32）就按 Chrome 要；
+    // 都不会也按 Safari 要（明文档一样），加密档标不可用。
+    // 只用这个源声明了的 DRM（Widevine 暂未启用，见 TENCENT_DRM_SYSTEMS）：只支持 Widevine 的客户端拿到的加密档标不可用。
+    const systems = clientDrm(request).filter((system) => TENCENT_DRM_SYSTEMS.includes(system))
+    const bits = systems.includes('widevine') && !systems.includes('fairplay') ? DRM_WIDEVINE : DRM_FAIRPLAY
     // 会员的 4K 只在声明了 HEVC 的答复里（`hevcVinfo`），和 H.264 那次一起要。
     const hevc = isVIP && this.session.loggedIn && transmuxAvailable() ? this.hevcVinfo(vid, signal) : Promise.resolve<{ info?: any; note?: string }>({ note: isVIP ? 'no-engine' : 'not-vip' })
-    let answer = await this.vinfo(vid, cid, isVIP ? 'fhd' : 'shd', signal)
-    if (int(answer.info?.em) === MEMBERSHIP_QUALITY) answer = await this.vinfo(vid, cid, 'shd', signal)
+    let answer = await this.vinfo(vid, cid, isVIP ? 'fhd' : 'shd', signal, bits)
+    if (int(answer.info?.em) === MEMBERSHIP_QUALITY) answer = await this.vinfo(vid, cid, 'shd', signal, bits)
     const info = answer.info
     checkInfo(info)
     const video = info.vl?.vi?.[0] ?? {}
     const note = restriction(info)
     if (note) throw new SourceError('restricted', note)
-    // 无权限的加密片给内联的 CMAF 主列表、没有许可：放不了。有许可的（会员）照常给 FairPlay 档。
-    if (isProtected(info) && (info.play?.master != null || (isProtectedSelection(info) && !drmOf(info)))) {
+    // 加密档却没有许可地址（没有权限）：放不了。有许可的（会员）照常给加密档。
+    if (isProtectedSelection(info) && !drmOf(info)) {
       throw new SourceError('unplayable', '该片为版权加密内容，暂不支持播放')
     }
     const ttl = Math.min(Math.max(num(video.ct) ?? 7200, 600), 21600) - 300
     const fourK = await hevc
-    const streams = [...this.streams(info, vid, cid, isVIP, ttl, ctx), ...this.transmuxedStreams(fourK.info, vid, ttl, ctx, request.preferences?.codecs)]
+    const streams = [...(await this.streams(info, vid, cid, isVIP, ttl, ctx, systems, bits)), ...this.transmuxedStreams(fourK.info, vid, ttl, ctx, request.preferences?.codecs)]
       .sort((a, b) => b.quality.rank - a.quality.rank)
     const available = streams.filter((s) => !s.unavailableReason)
     if (!available.length) {
-      throw new SourceError('unplayable', streams.some((s) => s.description.includes('FairPlay')) ? '该片为版权加密内容，暂不支持播放' : '没有可播放的清晰度')
+      const reason = streams.find((s) => s.unavailableReason?.includes('加密'))?.unavailableReason
+      throw new SourceError('unplayable', reason ?? '没有可播放的清晰度')
     }
     const max = request.preferences?.maxQualityRank
     const answered = arr(info.fl?.fi).find((f) => int(f?.sl) === 1)
@@ -316,11 +369,23 @@ export class TencentPlayback {
 
   // MARK: 流
 
-  /** 每档一条流，好的在前：答复选中的那档带地址，其他免费（会员则全部）档播放时才要，别人的会员档锁着。 */
-  private streams(info: any, vid: string, cid: string | undefined, isVIP: boolean, ttl: number, ctx: Ctx): Stream[] {
+  /**
+   * 每档一条流，好的在前：答复选中的那档带地址，其他免费（会员则全部）档播放时才要，别人的会员档锁着。加密档的 `drm` 按它播放列表
+   * 里实际的密钥标签给（选中那档解析时就读播放列表；播放时才要的档按 `drm` 字段推断，同一次请求的各档一样），客户端不会的标不可用。
+   */
+  private async streams(info: any, vid: string, cid: string | undefined, isVIP: boolean, ttl: number, ctx: Ctx,
+                        systems: DrmSystem[], bits: number): Promise<Stream[]> {
     const formats = arr(info.fl?.fi).filter((f) => qualityRank(f) !== undefined && isPlayableCodec(f))
     const answered = formats.find((f) => int(f.sl) === 1)
     const answeredURLs = playlistURLs(info)
+    // 选中的加密档：先读它的播放列表，看实际有哪些密钥标签。
+    let answeredSystems: DrmSystem[] | undefined
+    let answeredPlaylist: Promise<{ body: string; base: string }> | undefined
+    if (answered && formatSystem(answered) && answeredURLs.length) {
+      answeredPlaylist = this.fetchPlaylist(answeredURLs)
+      answeredSystems = await answeredPlaylist.then(({ body }) => playlistSystems(body), () => undefined)
+      answeredPlaylist.catch(() => undefined)
+    }
     const streams: Stream[] = []
     for (const format of formats) {
       const rank = qualityRank(format)!
@@ -329,27 +394,35 @@ export class TencentPlayback {
       const id = str(format.id) ?? name
       const quality = { rank, label }
       const isAnswered = answered !== undefined && str(answered.id) === str(format.id)
-      const fairPlay = isFairPlay(format)
+      const system = formatSystem(format)
+      const keySystems = system ? ((isAnswered ? answeredSystems : undefined) ?? [system]) : []
+      const usable = keySystems.filter((k) => systems.includes(k))
+      const description = `H.264 ${label}${keySystems.length ? ` ${keySystems.map(systemName).join(' / ')}` : ''}${isAnswered ? '' : '（播放时取地址）'}`
       if ((int(format.lmt) ?? 0) > 0 && !isVIP) {
-        streams.push({ id, url: this.unavailableURL(ctx), format: 'hls', quality, description: `H.264 ${label}`, unavailableReason: '需要腾讯视频 VIP', keepable: false })
+        streams.push({ id, url: this.unavailableURL(ctx), format: 'hls', quality, description, unavailableReason: '需要腾讯视频 VIP', keepable: false })
+        continue
+      }
+      if (keySystems.length && !usable.length) {
+        const reason = systems.length ? `这台设备不支持 ${keySystems.map(systemName).join(' / ')} 加密` : '这台设备不能播放加密内容'
+        streams.push({ id, url: this.unavailableURL(ctx), format: 'hls', quality, description, unavailableReason: reason, keepable: false })
         continue
       }
       if (isAnswered && !answeredURLs.length) continue
-      let urls: Promise<{ list: string[]; drm?: TencentDRM }> | undefined = isAnswered ? Promise.resolve({ list: answeredURLs, drm: drmOf(info) }) : undefined
+      let urls: Promise<{ list: string[]; drm?: TencentDRM; info: any }> | undefined = isAnswered ? Promise.resolve({ list: answeredURLs, drm: drmOf(info), info }) : undefined
       const addresses = () => {
-        urls ??= this.vinfo(vid, cid, name, undefined).then(async (answer) => {
+        urls ??= this.vinfo(vid, cid, name, undefined, bits).then(async (answer) => {
           let fetched = answer
           // vinfo_proxy 超出权限时给它能给的最高档（未登录时 shd 也降成 hd）：不是要的那档就自己签名再要一次。
           if (selectedName(fetched.info) !== name && fetched.path === 'vinfo_proxy') {
-            const signed = await this.signedVinfo(vid, name, undefined).catch(() => undefined)
+            const signed = await this.signedVinfo(vid, name, undefined, bits).catch(() => undefined)
             if (signed && selectedName(signed.info) === name) fetched = signed
           }
           checkInfo(fetched.info)
           const drm = drmOf(fetched.info)
-          if (isProtected(fetched.info) && (fetched.info.play?.master != null || !drm)) throw new SourceError('unplayable', '该片为版权加密内容，暂不支持播放')
+          if (isProtectedSelection(fetched.info) && !drm) throw new SourceError('unplayable', '该片为版权加密内容，暂不支持播放')
           const list = playlistURLs(fetched.info)
           if (!list.length) throw new SourceError('unplayable', '没有返回播放信息')
-          return { list, drm }
+          return { list, drm, info: fetched.info }
         })
         // 失败的不留着：App 重试时再要一次。
         urls.catch(() => {
@@ -359,9 +432,11 @@ export class TencentPlayback {
       }
       let playlist: Promise<string> | undefined
       const produce = () => {
-        playlist ??= addresses().then(async ({ list, drm }) => {
-          const text = await this.playlist(list, ctx, ttl)
-          return fairPlay && drm ? ensureKeyTag(text, drm.assetID) : text
+        playlist ??= addresses().then(async ({ list, drm, info: answer }) => {
+          if (system === 'widevine') return this.widevineMaster(answer, list, isAnswered ? answeredPlaylist : undefined, ctx, ttl)
+          const fetched = isAnswered && answeredPlaylist ? await answeredPlaylist.catch(() => this.fetchPlaylist(list)) : await this.fetchPlaylist(list)
+          const text = this.absolutized(fetched, ctx, ttl)
+          return system === 'fairplay' && drm ? ensureKeyTag(text, drm.assetID) : text
         })
         playlist.catch(() => {
           playlist = undefined
@@ -373,49 +448,80 @@ export class TencentPlayback {
         url: ctx.media.generated(produce, { name: `${name}.m3u8`, ttl, contentType: 'application/vnd.apple.mpegurl' }),
         format: 'hls',
         quality,
-        description: `H.264 ${label}${fairPlay ? ' FairPlay' : ''}${isAnswered ? '' : '（播放时取地址）'}`,
-        keepable: !fairPlay,
+        description,
+        keepable: !system,
       }
-      if (fairPlay) {
-        const ref = this.registerFairPlay(vid, cid, name, async () => {
+      if (system) {
+        const ref = this.registerDRM(vid, cid, name, bits, async () => {
           const { drm } = await addresses()
           if (!drm) throw new SourceError('unplayable', '该片为版权加密内容，暂不支持播放')
           return drm
         })
-        stream.fairPlay = fairPlayEndpoints(ctx.sourceId, ref)
+        Object.assign(stream, drmEndpoints(ctx.sourceId, ref, usable))
       }
       streams.push(stream)
     }
     return streams.sort((a, b) => b.quality.rank - a.quality.rank)
   }
 
-  // MARK: FairPlay
+  /**
+   * Widevine 档（Chrome 的能力位）：答复的 `play.master` 是视频 + 单独音轨的 CMAF（`SAMPLE-AES-CTR`，PSSH 在 data URI 里），
+   * 只是它的视频地址在 `omexts` 节点上。这里照它写一个 master：视频用 `ul.ui` 里最好的节点，音轨用 master 给的，两条媒体
+   * 播放列表都改成绝对地址经网关提供（密钥标签原样）。
+   */
+  private async widevineMaster(info: any, list: string[], prefetched: Promise<{ body: string; base: string }> | undefined, ctx: Ctx, ttl: number): Promise<string> {
+    const video = prefetched ? await prefetched.catch(() => this.fetchPlaylist(list)) : await this.fetchPlaylist(list)
+    const master = text(info?.play?.master) ?? ''
+    const streamInf = master.split(/\r?\n/).find((l) => l.startsWith('#EXT-X-STREAM-INF:'))
+    const audioURI = /#EXT-X-MEDIA:TYPE=AUDIO,[^\n]*URI="([^"]+)"/.exec(master)?.[1]
+    const lines = ['#EXTM3U', '#EXT-X-VERSION:6', '#EXT-X-INDEPENDENT-SEGMENTS']
+    let attributes = streamInf ? streamInf.slice('#EXT-X-STREAM-INF:'.length) : 'BANDWIDTH=4000000'
+    attributes = attributes.replace(/,?AUDIO="[^"]*"/, '')
+    if (audioURI) {
+      const audio = await this.fetchPlaylist([audioURI])
+      const audioURL = ctx.media.text(this.absolutized(audio, ctx, ttl), { name: 'audio.m3u8', ttl, contentType: 'application/vnd.apple.mpegurl' })
+      lines.push(`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="stream_0",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="${audioURL}"`)
+      attributes += ',AUDIO="audio"'
+    }
+    lines.push(`#EXT-X-STREAM-INF:${attributes}`)
+    lines.push(ctx.media.text(this.absolutized(video, ctx, ttl), { name: 'video.m3u8', ttl, contentType: 'application/vnd.apple.mpegurl' }))
+    return lines.join('\n') + '\n'
+  }
 
-  /** ref：`<随机>~<vid>~<cid>~<清晰度>`。登记里有就用登记的（和 App 播的播放列表同一次答复），没有就按后半段重新要。 */
-  private registerFairPlay(vid: string, cid: string | undefined, defn: string, drm: () => Promise<TencentDRM>): string {
-    const ref = `${randomHex(12)}~${vid}~${cid ?? ''}~${defn}`
+  // MARK: DRM 许可
+
+  /** ref：`<随机>~<vid>~<cid>~<清晰度>~<能力位>`。登记里有就用登记的（和客户端播的播放列表同一次答复），没有就按后半段重新要。 */
+  private registerDRM(vid: string, cid: string | undefined, defn: string, bits: number, drm: () => Promise<TencentDRM>): string {
+    const ref = `${randomHex(12)}~${vid}~${cid ?? ''}~${defn}~${bits}`
     const now = Date.now()
-    for (const [key, entry] of this.fairPlayRefs) if (now - entry.at > 12 * 3600_000) this.fairPlayRefs.delete(key)
-    if (this.fairPlayRefs.size > 500) this.fairPlayRefs.delete(this.fairPlayRefs.keys().next().value!)
-    this.fairPlayRefs.set(ref, { at: now, drm })
+    for (const [key, entry] of this.drmRefs) if (now - entry.at > 12 * 3600_000) this.drmRefs.delete(key)
+    if (this.drmRefs.size > 500) this.drmRefs.delete(this.drmRefs.keys().next().value!)
+    this.drmRefs.set(ref, { at: now, drm })
     return ref
   }
 
-  private async fairPlayDRM(ref: string, signal?: AbortSignal): Promise<TencentDRM> {
-    const entry = this.fairPlayRefs.get(ref)
-    if (entry) return entry.drm()
-    const [, vid, cid, defn] = ref.split('~')
-    if (!vid || !defn || !/^[A-Za-z0-9]+$/.test(vid)) throw new SourceError('bad_request', 'FairPlay 的 ref 不对')
-    const answer = await this.vinfo(vid, cid || undefined, defn, signal)
-    checkInfo(answer.info)
-    const drm = drmOf(answer.info)
-    if (!drm) throw new SourceError('unplayable', '没有返回播放许可，请重新解析', { retryable: true })
+  private async drmFor(system: DrmSystem, ref: string, signal?: AbortSignal): Promise<TencentDRM> {
+    const entry = this.drmRefs.get(ref)
+    let drm: TencentDRM | undefined
+    if (entry) {
+      drm = await entry.drm()
+    } else {
+      const [, vid, cid, defn, bits] = ref.split('~')
+      if (!vid || !defn || !/^[A-Za-z0-9]+$/.test(vid)) throw new SourceError('bad_request', 'DRM 的 ref 不对')
+      const answer = await this.vinfo(vid, cid || undefined, defn, signal, Number(bits) || (system === 'widevine' ? DRM_WIDEVINE : DRM_FAIRPLAY))
+      checkInfo(answer.info)
+      drm = drmOf(answer.info)
+      if (!drm) throw new SourceError('unplayable', '没有返回播放许可，请重新解析', { retryable: true })
+    }
+    if (drm.system !== system) throw new SourceError('bad_request', `这条流不是 ${systemName(system)} 加密的`)
     return drm
   }
 
-  /** 证书（DER）：答复给的地址（一般是 `fairplay.l.qq.com/static/fairplay.cer`），按地址缓存。 */
-  async certificate(ref: string, ctx: Ctx): Promise<Uint8Array> {
-    const { certificateURL } = await this.fairPlayDRM(ref, ctx.signal)
+  /** FairPlay 证书（DER）：答复给的地址（一般是 `fairplay.l.qq.com/static/fairplay.cer`），按地址缓存。Widevine 没有证书接口。 */
+  async certificate(system: DrmSystem, ref: string, ctx: Ctx): Promise<Uint8Array> {
+    if (system !== 'fairplay') throw new SourceError('bad_request', 'Widevine 没有证书接口')
+    const { certificateURL } = await this.drmFor(system, ref, ctx.signal)
+    if (!certificateURL) throw new SourceError('upstream_changed', '答复里没有 FairPlay 证书地址')
     let task = this.certificates.get(certificateURL)
     if (!task) {
       task = (async () => {
@@ -430,12 +536,21 @@ export class TencentPlayback {
     return task
   }
 
-  /** 照网页播放器：`POST <许可地址>`，表单 `spc=…&assetId=…`，答 JSON 带 base64 的 CKC。许可地址绑了视频、清晰度和那次请求。 */
-  async license(ref: string, spc: Uint8Array, ctx: Ctx): Promise<Uint8Array> {
-    const drm = await this.fairPlayDRM(ref, ctx.signal)
-    const response = await this.session.request(drm.licenseURL, {
-      method: 'POST', contentType: 'application/x-www-form-urlencoded', rawBody: licenseBody(spc, drm.assetID), signal: ctx.signal,
-    })
+  /**
+   * 照网页播放器（superplayer 1.80.0 的 `createFPSLicenseRequest` / `createWidevineLicenseRequest`）：
+   * - FairPlay：`POST <许可地址>`，表单 `spc=<base64>&assetId=<key id>`；
+   * - Widevine：`POST <许可地址>`，体是 challenge 原始字节（Content-Type 仍写表单）；
+   * 都答 JSON，许可是 `ckc` 的 base64。许可地址绑了视频、清晰度和那次请求。
+   */
+  async license(system: DrmSystem, ref: string, request: Uint8Array, ctx: Ctx): Promise<Uint8Array> {
+    const drm = await this.drmFor(system, ref, ctx.signal)
+    const response = system === 'fairplay'
+      ? await this.session.request(drm.licenseURL, {
+        method: 'POST', contentType: 'application/x-www-form-urlencoded', rawBody: licenseBody(request, drm.assetID), signal: ctx.signal,
+      })
+      : await this.session.request(drm.licenseURL, {
+        method: 'POST', contentType: 'application/x-www-form-urlencoded', rawBody: Buffer.from(request), signal: ctx.signal,
+      })
     return ckcOf(response)
   }
 
@@ -555,7 +670,11 @@ export class TencentPlayback {
    * 第一个能答出播放列表的节点给的播放列表，相对地址改成绝对的（分片随后从这个节点来）；`via: proxy` 时分片地址都指回网关。
    */
   async playlist(urls: string[], ctx: Ctx, ttl: number): Promise<string> {
-    const { body, base } = await this.fetchPlaylist(urls)
+    return this.absolutized(await this.fetchPlaylist(urls), ctx, ttl)
+  }
+
+  /** 相对地址（分片、`EXT-X-MAP`）改成绝对的，`via: proxy` 时指回网关；`skd://`、`data:` 的密钥地址不动。 */
+  absolutized({ body, base }: { body: string; base: string }, ctx: Ctx, ttl: number): string {
     if (this.via === 'direct') return rewritePlaylist(body, base, (absolute) => absolute)
     const headers = { 'user-agent': USER_AGENT, referer: REFERER }
     return rewritePlaylist(body, base, (absolute) => ctx.media.proxy(absolute, { headers, playlist: 'no', ttl }))
@@ -597,12 +716,12 @@ export class TencentPlayback {
   }
 
   /** 一档清晰度的播放信息：`vinfo_proxy`，不行就 `proxyhttp` 自己签。 */
-  async vinfo(vid: string, cid: string | undefined, defn: string, signal: AbortSignal | undefined): Promise<Answer> {
+  async vinfo(vid: string, cid: string | undefined, defn: string, signal: AbortSignal | undefined, drm = DRM_FAIRPLAY): Promise<Answer> {
     try {
-      return await this.proxiedVinfo(vid, cid, defn, signal)
+      return await this.proxiedVinfo(vid, cid, defn, signal, drm)
     } catch (error) {
       if (signal?.aborted) throw error
-      return this.signedVinfo(vid, defn, signal)
+      return this.signedVinfo(vid, defn, signal, drm)
     }
   }
 
@@ -618,8 +737,8 @@ export class TencentPlayback {
    * `vinfo_proxy`：页面自己的请求，播放器能力（H.264 HLS、FairPlay）和清晰度在 `vsite_ssr_cookie` 里；`useVCookie` 让
    * `vqqcookie` 里的登录算数（答复 `login` 3）。手机 UA 被拒（`ret` 6002），所以发桌面 Safari 的。
    */
-  async proxiedVinfo(vid: string, cid: string | undefined, defn: string, signal?: AbortSignal): Promise<Answer> {
-    const capability = { mse: false, wasm: false, hevc: false, h10: false, av1: false, hls: true, drm: 16, mdrm: 16, hdr: 0, da: false, dv: false, hwacc: true, sab: false }
+  async proxiedVinfo(vid: string, cid: string | undefined, defn: string, signal?: AbortSignal, drm = DRM_FAIRPLAY): Promise<Answer> {
+    const capability = { mse: false, wasm: false, hevc: false, h10: false, av1: false, hls: true, drm, mdrm: drm, hdr: 0, da: false, dv: false, hwacc: true, sab: false }
     const ssr = { capability, deviceInfo: {}, userSetting: { defn } }
     const cookies = this.session.loginCookies
     cookies.vsite_ssr_cookie = encode(JSON.stringify(ssr))
@@ -681,20 +800,20 @@ export class TencentPlayback {
    * `proxyhttp`（`buid=onlyvinfo`）的一档：解出的 `vinfo`。App 只用 8.5（带登录时分片 64 KB 后就卡住）；服务端能直接跑
    * 网页的 wasm，有 h38 时先用 9.2（网页自己切画质用的，分片不限速），9.2 失败再用 8.5。
    */
-  async signedVinfo(vid: string, defn: string, signal?: AbortSignal): Promise<Answer> {
+  async signedVinfo(vid: string, defn: string, signal?: AbortSignal, drm = DRM_FAIRPLAY): Promise<Answer> {
     const h38 = await this.h38()
     if (h38) {
       try {
-        const answer = await this.proxyhttp(vid, defn, h38, '9.2', signal)
+        const answer = await this.proxyhttp(vid, defn, h38, '9.2', signal, false, drm)
         if (int(answer.em) !== 85) return { info: answer, path: 'proxyhttp-9.2' }
       } catch (error) {
         if (signal?.aborted) throw error
       }
     }
-    return { info: await this.proxyhttp(vid, defn, h38, '8.5', signal), path: 'proxyhttp-8.5' }
+    return { info: await this.proxyhttp(vid, defn, h38, '8.5', signal, false, drm), path: 'proxyhttp-8.5' }
   }
 
-  async proxyhttp(vid: string, defn: string, h38: string, version: '8.5' | '9.2', signal?: AbortSignal, hevc = false): Promise<any> {
+  async proxyhttp(vid: string, defn: string, h38: string, version: '8.5' | '9.2', signal?: AbortSignal, hevc = false, drm = DRM_FAIRPLAY): Promise<any> {
     const timestamp = Math.floor(Date.now() / 1000)
     const page = pageURL(vid)
     const guid = this.session.guid
@@ -709,7 +828,7 @@ export class TencentPlayback {
       ['dtype', '3'], ['spsrt', '3'], ['tm', String(timestamp)], ['lang_code', '0'],
       ['logintoken', this.session.loginToken], ['qimei', ''], ['spvvpay', '1'], ['spadseg', '3'], ['spvideo', hevc ? '4096' : '0'],
       ['spm3u8tag', '67'], ['spmasterm3u8', '3'], ['spcaptiontrack', '1'], ['spcaptiontype', '1'],
-      ['appctrl', '16384'], ['drm', '16'], ['multidrm', '16'],
+      ['appctrl', '16384'], ['drm', String(drm)], ['multidrm', String(drm)],
     ]
     // 不带 `sphevcfps` 只答 H.264。
     if (hevc) params.push(['sphevcfps', '52776560789311'])
@@ -732,9 +851,9 @@ export function selectedName(info: any): string | undefined {
   return text(arr(info?.fl?.fi).find((f) => int(f?.sl) === 1)?.name)
 }
 
-/** 答复选中的那档是不是 FairPlay。 */
+/** 答复选中的那档是不是加密的（FairPlay 或 Widevine）。 */
 function isProtectedSelection(info: any): boolean {
-  return int(info?.vl?.vi?.[0]?.drm) === 4 || arr(info?.fl?.fi).some((f) => int(f?.sl) === 1 && isFairPlay(f))
+  return int(info?.vl?.vi?.[0]?.drm) === 4 || arr(info?.fl?.fi).some((f) => int(f?.sl) === 1 && formatSystem(f) !== undefined)
 }
 
 function decodeWith(raw: string, keys: string[], salt: string): any {

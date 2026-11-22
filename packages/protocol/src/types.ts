@@ -118,7 +118,10 @@ export interface Features {
   danmaku: { segmentDuration: number } | null
   subtitles: boolean
   progress: boolean
+  /** 有 FairPlay 许可转发（旧字段，等于 `drm` 含 fairplay）。 */
   fairPlay: boolean
+  /** 这个源能转发许可的 DRM（§6.4）；没有就是空数组。 */
+  drm: DrmSystem[]
 }
 
 /**
@@ -582,6 +585,21 @@ export interface FairPlayEndpoints {
   license: URLString
 }
 
+/** DRM 系统（§6.4）：客户端按格式选，不按平台。 */
+export type DrmSystem = 'fairplay' | 'widevine'
+
+/**
+ * 一条加密流在某个 DRM 下怎么拿许可。同一份 cbcs 流可以有几种 DRM，客户端挑自己支持的那个。
+ * - `fairplay`：`certificate` 返回证书原始字节；`license` 收 SPC 原始字节、回 CKC 原始字节。content identifier 是 `skd://` 的主机部分。
+ * - `widevine`：`license` 收 Widevine 的 license request（challenge）原始字节、回 license 原始字节；没有 `certificate`。
+ *   播放列表里有 `#EXT-X-KEY:METHOD=SAMPLE-AES,URI="data:text/plain;base64,<PSSH>",KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"`。
+ */
+export interface DrmEndpoints {
+  system: DrmSystem
+  license: URLString
+  certificate?: URLString
+}
+
 export interface Stream {
   id: string
   url: URLString
@@ -592,7 +610,10 @@ export interface Stream {
   unavailableReason?: string
   fallback?: Variant
   lowerVariants?: Variant[]
+  /** 旧字段，等于 `drm` 里 fairplay 那一项（旧 App 只认它）。 */
   fairPlay?: FairPlayEndpoints
+  /** 加密流可用的 DRM；明文流没有。客户端一个都不支持时这条流放不了（服务端通常已按 `preferences.drm` 标好 `unavailableReason`）。 */
+  drm?: DrmEndpoints[]
   /** App 能否缓存到本地，默认 true（§6.1）。要缓存的 HLS 必须是完整的点播 playlist（有 `EXT-X-ENDLIST`）。 */
   keepable?: boolean
 }
@@ -638,7 +659,10 @@ export interface ResolveRequest {
   video: string
   show?: string | null
   /** `codecs`：客户端能解的编码（RFC 6381 前缀，如 `avc1`、`hvc1`、`mp4a`、`ac-3`）；缺省 = 不限。 */
-  preferences?: { maxQualityRank?: number | null; language?: string | null; adaptive?: boolean; codecs?: string[] | null }
+  /**
+   * `drm`：客户端能用的 DRM（§6.4）。缺省（旧 App）当 `['fairplay']`；`[]` 表示什么 DRM 都不能用（模拟器、调试环境），加密档标不可用。
+   */
+  preferences?: { maxQualityRank?: number | null; language?: string | null; adaptive?: boolean; codecs?: string[] | null; drm?: DrmSystem[] | null }
 }
 
 export type ProgressEvent = 'start' | 'progress' | 'seek' | 'leave' | 'end'

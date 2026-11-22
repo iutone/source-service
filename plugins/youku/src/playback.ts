@@ -1,11 +1,14 @@
 // 播放：UPS `mtop.youku.play.ups.appinfo.get`（docs/youku-web/REPORT.md §3、§8.6；PLAYER.md），进度上报 `playlog.open.push`
 // （PLAYER.md §6）。照 App 的 YoukuPlaybackService 移植。给 App 的都是不要请求头的 HLS：明文流直接给 CDN 地址（实测不校验
 // UA / Referer / cookie）；优酷私有加密（copyrightDRM）、MPEG-TS 封装的 HEVC（mp5*，AVPlayer 只解得出声音）要在服务端解密 /
-// 转封装（private.ts）；FairPlay（cbcs）不支持。
-import type { Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream } from '@iyt-source/protocol'
+// 转封装（private.ts）；cbcs 加密的 CMAF 档在客户端解密（FairPlay / Widevine），服务端只转发许可（fairplay.ts）。
+import type { DrmSystem, Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream } from '@iyt-source/protocol'
 import { SourceError } from '@iyt-source/kit'
 import { arr, bool, compact, int, num, text, webImage, type J } from './json.ts'
 import { CCODE, CLIENT_VERSION, PLAYER_VERSION, UPS_HOST, type MTOPClient } from './mtop.ts'
+
+/** 客户端什么 DRM 都不能用（`preferences.drm` 是 `[]`）。 */
+export const NO_DRM = '这台设备不能播加密片源'
 
 /** UPS 的错误码，照 KuPlayer 对它们的提示（PLAYER.md §错误码）：note 往往只有「此视频无法播放」。 */
 export function restriction(code: number): string | undefined {
@@ -43,15 +46,16 @@ export interface PrivateClient {
   recover?(server: string, copyright: string): Buffer
 }
 
-export function upsParameters(options: { vid: string; ckey: string; utid: string; privateClient?: string; hevc?: boolean; fairPlay?: boolean; now?: number }): Record<string, string> {
+export function upsParameters(options: { vid: string; ckey: string; utid: string; privateClient?: string; hevc?: boolean; cbcs?: DrmSystem; now?: number }): Record<string, string> {
   const biz: Record<string, unknown> = {
     vid: options.vid, app_ver: CLIENT_VERSION, h265: 0, play_ability: 16782592, master_m3u8: 0, preferClarity: 3, media_type: 'standard',
     extag: 'EXT-X-PRIVINF',
   }
-  if (options.fairPlay) {
-    // KuPlayer 的 Safari 分支：drmType 19（cbcs）、drmLevel 1、keyIndex web01（FAIRPLAY.md §3）。
+  if (options.cbcs) {
+    // KuPlayer 的 getDrmType：Safari（FairPlay）19 加 drmLevel 1；Chrome 69+ 的 Widevine 走 cbcs 也是 19，不带 drmLevel
+    // （不走 cbcs 时是 35 = cenc，CMAF 用不上）。keyIndex 都是 web01（FAIRPLAY.md §3）。给的是同一组 cbcs CMAF。
     biz.drm_type = 19
-    biz.drm_level = 1
+    if (options.cbcs === 'fairplay') biz.drm_level = 1
     biz.key_index = 'web01'
   }
   if (options.privateClient) {
@@ -59,7 +63,7 @@ export function upsParameters(options: { vid: string; ckey: string; utid: string
     // 私有密钥的包装和 KSM 的响应加密无关：FairPlay 的 CKC 不包装。
     biz.enc_ver = 0
     biz.key_index = 'web01'
-    biz.drm_type = options.fairPlay ? 19 : 3
+    biz.drm_type = options.cbcs ? 19 : 3
     biz.h265 = options.hevc ? 1 : 0
     biz.play_ability = 16782592 | (1 << 18) | (1 << 20)
     biz.master_m3u8 = 1
@@ -83,8 +87,8 @@ export function checkUPS(ups: J): void {
     const code = int(ups.error.code) ?? 0
     const note = text(ups.error.note) ?? `错误码 ${code}`
     if (code === -6004) throw new UPSError('unavailable', `播放密钥被优酷拒绝：${note}`, code, { retryable: true })
-    // 「DRM视频，不支持」：只有声明了 FairPlay 才给这些片子。
-    if (code === -4008) throw new UPSError('unplayable', '这个视频只有 FairPlay 加密的版本，取 FairPlay 流也没成功', code)
+    // 「DRM视频，不支持」：只有声明了 DRM 才给这些片子。
+    if (code === -4008) throw new UPSError('unplayable', '这个视频只有加密的版本，取加密流也没成功', code)
     const reason = restriction(code)
     if (reason) throw new UPSError(code === -6005 ? 'login_required' : 'restricted', reason, code)
     throw new UPSError('unplayable', `优酷不给播放：${note}（${code}）`, code)
@@ -279,7 +283,7 @@ export interface RawStream {
   quality: { rank: number; label: string }
   languageCode: string
   /** 怎么给 App：直接给、服务端解密 / 转封装、给不了。 */
-  path: 'direct' | 'fairplay' | 'private' | 'remux' | 'unsupported'
+  path: 'direct' | 'cbcs' | 'private' | 'remux' | 'unsupported'
   /** cbcs：许可地址（`stream_ext.uri`，token 绑本次取流）。 */
   licenseURL?: string
   /** copyrightDRM：恢复出的内容密钥。 */
@@ -291,7 +295,10 @@ export interface RawStream {
  * UPS 的流按清晰度和语言各留一个：AVPlayer 能直接播的优先（明文 H.264 优先于要转封装的 HEVC TS），再挑大的。
  * - `canProcess`：服务端能不能解密 / 转封装（private.ts 可用时为 true）。
  */
-export function pickStreams(ups: J, options: { privateClient?: PrivateClient; canProcess: boolean; fairPlay?: boolean; log?: (message: string) => void }): RawStream[] {
+/**
+ * - `cbcs`：这次 UPS 声明了 cbcs 时，客户端能用的 DRM（`[]` 时 cbcs 档标不可用）；没声明时省略，cbcs 档给不了。
+ */
+export function pickStreams(ups: J, options: { privateClient?: PrivateClient; canProcess: boolean; cbcs?: DrmSystem[]; log?: (message: string) => void }): RawStream[] {
   const byKey = new Map<string, RawStream>()
   const rankOf = (s: RawStream) => streamRank(s, options.canProcess)
   for (const raw of arr(ups?.stream)) {
@@ -321,12 +328,17 @@ export function pickStreams(ups: J, options: { privateClient?: PrivateClient; ca
           continue
         }
       }
-    } else if (drm === 'cbcs' && options.fairPlay && text(raw?.stream_ext?.uri)?.startsWith('https://')) {
-      stream.path = 'fairplay'
-      stream.licenseURL = text(raw.stream_ext.uri)
+    } else if (drm === 'cbcs' && options.cbcs && text(raw?.stream_ext?.uri)?.startsWith('https://')) {
+      if (options.cbcs.length) {
+        stream.path = 'cbcs'
+        stream.licenseURL = text(raw.stream_ext.uri)
+      } else {
+        stream.path = 'unsupported'
+        stream.reason = NO_DRM
+      }
     } else if (drm === 'cbcs' || drm === 'cenc' || drm === 'webDRM') {
       stream.path = 'unsupported'
-      stream.reason = 'FairPlay 加密的清晰度，自建源暂不支持'
+      stream.reason = '加密的清晰度，自建源暂不支持'
     } else if (drm !== 'default' && drm !== '') {
       stream.path = 'unsupported'
       stream.reason = `不支持的加密（${drm}）`
@@ -359,20 +371,20 @@ export function pickStreams(ups: J, options: { privateClient?: PrivateClient; ca
 }
 
 /**
- * 同一档里谁优先：CDN 直连的明文 > FairPlay（设备上解密，服务端不费 CPU）> 服务端解密 / 转封装 > 给不了的。
+ * 同一档里谁优先：CDN 直连的明文 > cbcs（客户端解密，服务端不费 CPU）> 服务端解密 / 转封装 > 给不了的。
  * - `canProcess`：服务端能不能解密 / 转封装。
  */
 export function streamRank(s: RawStream, canProcess: boolean): number {
   switch (s.path) {
     case 'direct': return 4
-    case 'fairplay': return 3
+    case 'cbcs': return 3
     case 'private':
     case 'remux': return canProcess ? 2 : 1
     default: return 0
   }
 }
 
-/** 几次 UPS（明文 / 私有、FairPlay）挑出的流合在一起：每档每种语言留一个，按上面的优先级。 */
+/** 几次 UPS（明文 / 私有、cbcs）挑出的流合在一起：每档每种语言留一个，按上面的优先级。 */
 export function mergeStreams(lists: RawStream[][], canProcess: boolean): RawStream[] {
   const byKey = new Map<string, RawStream>()
   for (const list of lists) {

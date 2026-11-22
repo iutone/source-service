@@ -90,7 +90,8 @@
         },
         "subtitles": true,
         "progress": true,
-        "fairPlay": false
+        "fairPlay": false,
+        "drm": []
       },
       "links": {
         "patterns": [

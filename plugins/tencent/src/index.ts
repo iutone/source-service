@@ -11,7 +11,7 @@ import { TencentDetail } from './detail.ts'
 import { CHANNELS, CHASING, HOME, LIBRARY_ROWS, TencentFeed, dimensions, filterParams } from './feed.ts'
 import { TencentHistory } from './history.ts'
 import { linkTarget, LINK_PATTERNS } from './ids.ts'
-import { TencentPlayback, type PlaybackOptions } from './playback.ts'
+import { TENCENT_DRM_SYSTEMS, TencentPlayback, type PlaybackOptions } from './playback.ts'
 import { RANKINGS, RANKING_SIZE, TencentSearch } from './search.ts'
 import { TencentSession } from './session.ts'
 
@@ -201,13 +201,15 @@ export function createTencentSource(options: TencentOptions = {}): SourcePlugin 
       progress(request, ctx) {
         return use(ctx).playback.progress(request, ctx)
       },
-      // 版权方加密片（drm 4：TS + SAMPLE-AES，skd://）的证书和许可，照网页播放器转发（SERVER.md §6.4）。
-      fairPlay: {
-        certificate(ref, ctx) {
-          return use(ctx).playback.certificate(ref, ctx)
+      // 加密档（FairPlay：drm 4，TS + SAMPLE-AES、skd://；Widevine：drm 5，CENC fMP4）的证书和许可，照网页播放器转发（SERVER.md §6.4）。
+      drm: {
+        // Widevine 的取流和转发已写好，但许可可能被腾讯封装进 `anc`（网页里的可信 JS 才解得开），真实许可的格式还没抓包确认，先不声明。
+        systems: TENCENT_DRM_SYSTEMS,
+        certificate(system, ref, ctx) {
+          return use(ctx).playback.certificate(system, ref, ctx)
         },
-        license(ref, spc, ctx) {
-          return use(ctx).playback.license(ref, spc, ctx)
+        license(system, ref, request, ctx) {
+          return use(ctx).playback.license(system, ref, request, ctx)
         },
       },
     },

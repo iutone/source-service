@@ -497,6 +497,34 @@
     "DateString": {
       "type": "string"
     },
+    "DrmEndpoints": {
+      "additionalProperties": false,
+      "description": "一条加密流在某个 DRM 下怎么拿许可。同一份 cbcs 流可以有几种 DRM，客户端挑自己支持的那个。\n- `fairplay`：`certificate` 返回证书原始字节；`license` 收 SPC 原始字节、回 CKC 原始字节。content identifier 是 `skd://` 的主机部分。\n- `widevine`：`license` 收 Widevine 的 license request（challenge）原始字节、回 license 原始字节；没有 `certificate`。   播放列表里有 `#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"data:text/plain;base64,<PSSH>\",KEYFORMAT=\"urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed\"`。",
+      "properties": {
+        "certificate": {
+          "$ref": "#/definitions/URLString"
+        },
+        "license": {
+          "$ref": "#/definitions/URLString"
+        },
+        "system": {
+          "$ref": "#/definitions/DrmSystem"
+        }
+      },
+      "required": [
+        "system",
+        "license"
+      ],
+      "type": "object"
+    },
+    "DrmSystem": {
+      "description": "DRM 系统（§6.4）：客户端按格式选，不按平台。",
+      "enum": [
+        "fairplay",
+        "widevine"
+      ],
+      "type": "string"
+    },
     "Episode": {
       "additionalProperties": false,
       "properties": {
@@ -726,7 +754,15 @@
           ],
           "type": "object"
         },
+        "drm": {
+          "description": "这个源能转发许可的 DRM（§6.4）；没有就是空数组。",
+          "items": {
+            "$ref": "#/definitions/DrmSystem"
+          },
+          "type": "array"
+        },
         "fairPlay": {
+          "description": "有 FairPlay 许可转发（旧字段，等于 `drm` 含 fairplay）。",
           "type": "boolean"
         },
         "feed": {
@@ -804,7 +840,8 @@
         "danmaku",
         "subtitles",
         "progress",
-        "fairPlay"
+        "fairPlay",
+        "drm"
       ],
       "type": "object"
     },
@@ -1516,9 +1553,36 @@
       "properties": {
         "preferences": {
           "additionalProperties": false,
+          "description": "`drm`：客户端能用的 DRM（§6.4）。缺省（旧 App）当 `['fairplay']`；`[]` 表示什么 DRM 都不能用（模拟器、调试环境），加密档标不可用。",
           "properties": {
             "adaptive": {
               "type": "boolean"
+            },
+            "codecs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "drm": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/definitions/DrmSystem"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "language": {
               "type": [
@@ -1976,8 +2040,16 @@
         "description": {
           "type": "string"
         },
+        "drm": {
+          "description": "加密流可用的 DRM；明文流没有。客户端一个都不支持时这条流放不了（服务端通常已按 `preferences.drm` 标好 `unavailableReason`）。",
+          "items": {
+            "$ref": "#/definitions/DrmEndpoints"
+          },
+          "type": "array"
+        },
         "fairPlay": {
-          "$ref": "#/definitions/FairPlayEndpoints"
+          "$ref": "#/definitions/FairPlayEndpoints",
+          "description": "旧字段，等于 `drm` 里 fairplay 那一项（旧 App 只认它）。"
         },
         "fallback": {
           "$ref": "#/definitions/Variant"

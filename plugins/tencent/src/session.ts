@@ -48,7 +48,7 @@ export interface RequestOptions {
   query?: Record<string, string>
   body?: unknown
   /** 原样发的请求体（表单）；有它就不用 `body`。 */
-  rawBody?: string
+  rawBody?: string | Uint8Array
   contentType?: string
   headers?: Record<string, string>
   /** 省略时带登录 cookie（`loginCookies`）。 */
@@ -310,7 +310,7 @@ export class TencentSession {
       'user-agent': USER_AGENT, referer: REFERER, origin: ORIGIN,
       cookie: cookieHeader(options.cookies ?? this.loginCookies),
     }
-    let body: string | undefined
+    let body: string | Uint8Array | undefined
     if (options.method === 'POST') {
       headers['content-type'] = options.contentType ?? 'application/json'
       body = options.rawBody ?? JSON.stringify(options.body ?? {})
@@ -318,7 +318,7 @@ export class TencentSession {
     for (const [name, value] of Object.entries(options.headers ?? {})) headers[name.toLowerCase()] = value
     let response: Response
     try {
-      response = await fetch(url, { method: options.method ?? 'GET', headers, body, signal: withTimeout(options.signal) })
+      response = await fetch(url, { method: options.method ?? 'GET', headers, body: body as BodyInit | undefined, signal: withTimeout(options.signal) })
     } catch (error) {
       if (options.signal?.aborted) throw error
       throw new SourceError('unavailable', '连不上腾讯视频', { cause: error })
