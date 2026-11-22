@@ -28,6 +28,8 @@ export class YtDlp {
   private readonly waiting: (() => void)[] = []
   private readonly cache = new Map<string, Cached>()
   private cachedVersion?: string
+  private versionProbe?: Promise<string | undefined>
+  private versionFailedAt = 0
   private lastUpdate = 0
 
   constructor(options: YtDlpOptions = {}) {
@@ -38,16 +40,32 @@ export class YtDlp {
     this.updateCommand = options.updateCommand ?? process.env.YTDLP_UPDATE?.split(' ').filter(Boolean)
   }
 
-  /** 版本号；没装时 `undefined`。 */
+  /** 版本号；没装时 `undefined`。同时只查一次（并发的调用共用这次结果）。 */
   async version(): Promise<string | undefined> {
     if (this.cachedVersion) return this.cachedVersion
-    try {
-      const { stdout } = await this.run(['--version'], 5_000)
-      this.cachedVersion = stdout.trim()
-      return this.cachedVersion
-    } catch {
-      return undefined
-    }
+    this.versionProbe ??= (async () => {
+      try {
+        // 单文件打包的 yt-dlp（如 yt-dlp_macos）每次启动都要先解包，慢的机器上十几秒，给足时间。
+        const { stdout } = await this.run(['--version'], 30_000)
+        this.cachedVersion = stdout.trim()
+        return this.cachedVersion
+      } catch {
+        this.versionFailedAt = Date.now()
+        return undefined
+      } finally {
+        this.versionProbe = undefined
+      }
+    })()
+    return this.versionProbe
+  }
+
+  /**
+   * 已知的版本号，不等待（manifest 用：不能被慢的 yt-dlp 拖住）。还不知道时在后台查一次，
+   * 失败后 60 秒内不再查。
+   */
+  peekVersion(): string | undefined {
+    if (!this.cachedVersion && !this.versionProbe && Date.now() - this.versionFailedAt > 60_000) void this.version()
+    return this.cachedVersion
   }
 
   /**

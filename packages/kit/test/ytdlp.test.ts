@@ -16,3 +16,27 @@ describe('classify yt-dlp errors', () => {
     expect(classify(line).code).toBe(code)
   })
 })
+
+describe('yt-dlp version', () => {
+  it('peekVersion does not wait, probes once in the background', async () => {
+    const { mkdtempSync, writeFileSync, chmodSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const { tmpdir } = await import('node:os')
+    const { YtDlp } = await import('../src/ytdlp.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'ytdlp-'))
+    const bin = join(dir, 'yt-dlp')
+    const counter = join(dir, 'count')
+    // 假的 yt-dlp：启动慢 300 ms，记录被调用的次数。
+    writeFileSync(bin, `#!/bin/sh\necho x >> ${counter}\nsleep 0.3\necho 2026.11.01\n`)
+    chmodSync(bin, 0o755)
+    const ytdlp = new YtDlp({ binary: bin })
+    const started = Date.now()
+    expect(ytdlp.peekVersion()).toBeUndefined()
+    expect(ytdlp.peekVersion()).toBeUndefined()
+    expect(Date.now() - started).toBeLessThan(100)
+    expect(await ytdlp.version()).toBe('2026.11.01')
+    expect(ytdlp.peekVersion()).toBe('2026.11.01')
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(1)
+  })
+})
