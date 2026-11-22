@@ -2,7 +2,7 @@
 // - 没有凭证：浏览、搜索、详情、评论、弹幕、未登录的播放解析（分片不带请求头也能取）、登录二维码；再把 `requiredFor` 临时
 //   改成 `nothing` 起一个服务跑 iyt-source check（这个源真正的配置要登录才浏览，check 会跳过）。
 // - `TENCENT_CREDENTIAL='<App 的 TencentCredential JSON>'`：存进源的存储，续期、会员、观看历史、我的追剧，原样跑 check。
-//   续期后的凭证打印出来（vurefresh 不变，可以接着用）。
+//   会员时另测 4K：HEVC 答复、转封装成 fMP4 的 master / 初始化段 / 分片（本机有 ffprobe 时读出 HEVC 3840×2160）。
 import { mkdtempSync, rmSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -13,6 +13,8 @@ import { check } from '../../../packages/cli/src/check.ts'
 import { createTencentSource } from '../src/index.ts'
 import { TencentSession } from '../src/session.ts'
 import { normalizeCredential } from '../src/session.ts'
+import { execFileSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
 
 const live = process.env.TENCENT_LIVE === '1'
 const credentialJSON = process.env.TENCENT_CREDENTIAL
@@ -132,7 +134,6 @@ describe.skipIf(!live || !credentialJSON)('腾讯视频 live（登录）', () =>
     const state = await plugin.account!.state(ctx)
     console.log('[account]', state)
     expect(state.loggedIn).toBe(true)
-    console.log('[credential]', JSON.stringify(new TencentSession(store).credential))
   }, 30_000)
 
   it('reads the history and the shows followed', async () => {
@@ -152,6 +153,50 @@ describe.skipIf(!live || !credentialJSON)('腾讯视频 live（登录）', () =>
     console.log('[resolve]', media.diagnostics, media.startPosition, media.streams.map((s) => `${s.id} ${s.quality.label} ${s.unavailableReason ?? ''}`))
     expect(media.streams.some((s) => !s.unavailableReason)).toBe(true)
   }, 60_000)
+
+  it('offers a member’s 4K remuxed to fMP4, not picked by default', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'iyt-tencent-4k-'))
+    new KeyValueStore(join(data, 'sources', 'tencent')).set('credential', new TencentSession(store).credential)
+    const server = await createServer({ name: 'live', dataDir: data, sources: [{ id: 'tencent', plugin: createTencentSource() }] })
+    await server.app.listen({ port: 0, host: '127.0.0.1' })
+    const base = `http://127.0.0.1:${(server.app.server.address() as AddressInfo).port}`
+    const headers = { 'x-iutone-client': 'live-test', 'content-type': 'application/json' }
+    const resolve = async (preferences: object) => (await (await fetch(`${base}/iyt/v1/sources/tencent/playback/resolve`, {
+      method: 'POST', headers, body: JSON.stringify({ video: 'vc4102g9a01t', show: 'cmzc00200803dr6b', preferences }),
+    })).json()) as any
+    try {
+      const media = await resolve({})
+      console.log('[4k]', media.diagnostics, media.streams.map((s: any) => `${s.id} ${s.unavailableReason ?? ''}`))
+      const fourK = media.streams.find((s: any) => s.id.startsWith('hevc-'))
+      if (!fourK || fourK.unavailableReason) return // 不是 SVIP（或这部没有 4K）
+      expect(media.selectedStream).not.toBe(fourK.id)
+      expect((await resolve({ maxQualityRank: 2160 })).selectedStream).toBe(fourK.id)
+      const h264Only = await resolve({ codecs: ['avc1', 'mp4a'] })
+      expect(h264Only.streams.find((s: any) => s.id === fourK.id).unavailableReason).toBe('这台设备不能解 HEVC')
+      const master = await (await fetch(base + fourK.url, { headers })).text()
+      console.log(master)
+      expect(master).toMatch(/CODECS="hvc1\.2\.4\.L\d+\.90,mp4a\.40\.2"/)
+      expect(master).toMatch(/RESOLUTION=3840x2160/)
+      expect(master).toMatch(/VIDEO-RANGE=(SDR|PQ|HLG)/)
+      const playlist = await (await fetch(base + master.split('\n').find((l) => l.startsWith('/'))!, { headers })).text()
+      const init = /#EXT-X-MAP:URI="([^"]+)"/.exec(playlist)![1]!
+      const fragment = playlist.split('\n').find((l) => l.startsWith('/'))!
+      const bytes = Buffer.concat([Buffer.from(await (await fetch(base + init)).arrayBuffer()), Buffer.from(await (await fetch(base + fragment)).arrayBuffer())])
+      expect(bytes.includes('hvcC')).toBe(true)
+      const file = join(data, 'first.mp4')
+      writeFileSync(file, bytes)
+      try {
+        const probe = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,codec_tag_string,width,height', '-of', 'csv=p=0', file]).toString().trim()
+        console.log('[ffprobe]', probe)
+        expect(probe).toBe('hevc,hvc1,3840,2160')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    } finally {
+      await server.close()
+      rmSync(data, { recursive: true, force: true })
+    }
+  }, 300_000)
 
   it('passes the conformance check', async () => {
     const data = mkdtempSync(join(tmpdir(), 'iyt-tencent-check-'))

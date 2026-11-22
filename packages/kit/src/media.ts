@@ -45,9 +45,20 @@ type Entry =
       children: string[]
       childIndex: Map<string, number>
       indexes: Map<string, Promise<SegmentIndex>>
+      backups: Map<string, string[]>
+      preferred: Map<string, number>
     }
 
-type Children = { children: string[]; childIndex: Map<string, number>; dispatcher?: unknown; onRefused?: () => void }
+type Children = {
+  children: string[]
+  childIndex: Map<string, number>
+  dispatcher?: unknown
+  onRefused?: () => void
+  /** 主地址 → 备用地址（DASH 轨道的备用 CDN）。 */
+  backups?: Map<string, string[]>
+  /** 主地址 → 上次成功的是第几个地址（0 是主地址）：主地址坏了以后直接从好的开始。 */
+  preferred?: Map<string, number>
+}
 
 export interface MediaOptions {
   /** 有效期，秒；默认 6 小时。 */
@@ -160,6 +171,8 @@ export class MediaGateway {
 
   /**
    * 音视频分开的单文件 DASH 轨道（YouTube 的 https 格式），返回 master 地址。分段索引在播放器第一次请求时读取。
+   * 轨道的 `backupURLs`：`via: proxy` 时取主地址失败（连不上、403 / 404 / 410 / 429 / 5xx）就换下一个，读分段索引也一样；
+   * `direct` 时播放列表里只有主地址。
    * - Parameter via: `direct` 分片地址直接给 CDN（App 和服务同一出口时可用，省 NAS 带宽）；`proxy` 经网关转发。
    */
   dash(tracks: { videos: DashVideoTrack[]; audios: DashAudioTrack[]; subtitles?: SubtitleRendition[] }, options: MediaOptions & { headers?: Record<string, string>; via?: 'direct' | 'proxy'; dispatcher?: unknown; onRefused?: () => void } = {}): string {
@@ -178,6 +191,8 @@ export class MediaGateway {
         children: [],
         childIndex: new Map(),
         indexes: new Map(),
+        backups: new Map([...tracks.videos, ...tracks.audios].filter((t) => t.backupURLs?.length).map((t) => [t.url, t.backupURLs!])),
+        preferred: new Map(),
       },
       options.name ?? 'master.m3u8',
     )
@@ -233,7 +248,8 @@ export class MediaGateway {
     if (!source) throw new SourceError('not_found', '找不到这条轨道')
     let index = entry.indexes.get(source.url)
     if (!index) {
-      index = readSegmentIndex((start, end) => fetchRange(source.url, entry.headers, start, end, entry.dispatcher))
+      const urls = [source.url, ...(source.backupURLs ?? [])]
+      index = readSegmentIndex((start, end) => fetchRangeFirst(urls, entry.headers, start, end, entry.dispatcher, entry.preferred, source.url))
       entry.indexes.set(source.url, index)
       index.catch((error) => {
         entry.indexes.delete(source.url)
@@ -265,13 +281,30 @@ export class MediaGateway {
     reply.raw.on('close', () => {
       if (!reply.raw.writableFinished) controller.abort()
     })
-    let upstream: Response
-    try {
-      upstream = await fetch(url, { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers, redirect: 'follow', signal: controller.signal,
-                                    dispatcher: entry.dispatcher } as RequestInit)
-    } catch (error) {
-      throw new SourceError('unavailable', '上游连不上', { cause: error, retryable: true })
+    const candidates = [url, ...(entry.backups?.get(url) ?? [])]
+    const first = Math.min(entry.preferred?.get(url) ?? 0, candidates.length - 1)
+    let upstream: Response | undefined
+    let failure: unknown
+    for (let attempt = 0; attempt < candidates.length; attempt++) {
+      const position = (first + attempt) % candidates.length
+      const isLast = attempt === candidates.length - 1
+      try {
+        const response = await fetch(candidates[position], { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers, redirect: 'follow', signal: controller.signal,
+                                                            dispatcher: entry.dispatcher } as RequestInit)
+        if (!isLast && shouldTryNext(response.status)) {
+          await response.body?.cancel()
+          failure = response.status
+          continue
+        }
+        if (candidates.length > 1 && response.ok) entry.preferred?.set(url, position)
+        upstream = response
+        break
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+        failure = error
+      }
     }
+    if (!upstream) throw new SourceError('unavailable', '上游连不上', { cause: failure, retryable: true })
     if (upstream.status === 403 || upstream.status === 410) {
       entry.onRefused?.()
       throw new SourceError('unplayable', '上游拒绝了这个地址，请重新解析', { retryable: true })
@@ -385,6 +418,32 @@ export function parseRange(header: string | string[] | undefined, size: number):
   }
   if (start > end || start >= size) return 'invalid'
   return [start, end]
+}
+
+/** 换下一个地址的情况：地址失效、被拒、限流、上游出错。 */
+function shouldTryNext(status: number): boolean {
+  return status === 403 || status === 404 || status === 410 || status === 429 || status >= 500
+}
+
+/**
+ * 依次试几个地址读同一段字节（主地址加备用 CDN），返回第一个成功的。`preferred` 记下成功的是第几个（按 `key`）。
+ * 都失败时抛最后一个错误。
+ */
+export async function fetchRangeFirst(urls: string[], headers: Record<string, string>, start: number, end: number, dispatcher?: unknown,
+                                      preferred?: Map<string, number>, key = urls[0]): Promise<Uint8Array> {
+  const first = Math.min(preferred?.get(key) ?? 0, urls.length - 1)
+  let failure: unknown
+  for (let attempt = 0; attempt < urls.length; attempt++) {
+    const position = (first + attempt) % urls.length
+    try {
+      const bytes = await fetchRange(urls[position], headers, start, end, dispatcher)
+      if (urls.length > 1) preferred?.set(key, position)
+      return bytes
+    } catch (error) {
+      failure = error
+    }
+  }
+  throw failure
 }
 
 /** 读上游的一段字节（含两端）。 */

@@ -3,7 +3,7 @@
 // CDN 要 Referer 和 UA，所以分片经网关转发。进度用网页的 heartbeat 上报。CC 字幕（JSON）转成 WebVTT 写进 master，原文给 App 翻译。
 import type { Chapter, Cue, Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream, SubtitleTrack } from '@iyt-source/protocol'
 import { BASE_PATH } from '@iyt-source/protocol'
-import { SourceError, webVTTPlaylist, type Ctx, type DashAudioTrack, type DashVideoTrack, type SubtitleRendition } from '@iyt-source/kit'
+import { codecFamily, codecName, codecSupported, SourceError, webVTTPlaylist, type Ctx, type DashAudioTrack, type DashVideoTrack, type SubtitleRendition } from '@iyt-source/kit'
 import {
   episodePaywall, episodeTitle, isMain, paywallMessage, playerInfo, viewPaywall,
   type BiliSeason, type Catalog, type Paywall, type PlayerInfo,
@@ -17,8 +17,10 @@ import { API, REFERER, USER_AGENT } from './sign.ts'
 const FINISHED_MARGIN = 10
 /** 1080P+ 及以上要大会员（8K 127、杜比视界 126、HDR 125、4K 120、1080P60 116、1080P+ 112）。 */
 const VIP_THRESHOLD = 112
-/** HDR 真彩和杜比视界：网关生成的 master 不声明 VIDEO-RANGE，SDR 屏幕上 AVPlayer 会卡住或发灰，先不给。 */
-const HDR = new Set([125, 126])
+/** HDR 真彩（125）和杜比视界（126）：master 声明 VIDEO-RANGE，并带一条最好的 SDR 画面作 SDR 屏幕的回退。 */
+const HDR_QN = 125
+const DOLBY_VISION_QN = 126
+export const isHDR = (qn: number) => qn === HDR_QN || qn === DOLBY_VISION_QN
 
 export const QUALITY_LABELS: Record<number, string> = {
   127: '8K 超高清', 126: '杜比视界', 125: 'HDR 真彩', 120: '4K 超清', 116: '1080P 60帧', 112: '1080P 高码率', 80: '1080P 高清',
@@ -49,7 +51,15 @@ export interface PlayURL {
   quality?: number
   accept_quality?: number[]
   support_formats?: { quality: number; new_description?: string; display_desc?: string }[]
-  dash?: { duration: number; video: PlayTrack[]; audio?: PlayTrack[] | null; dolby?: { audio?: PlayTrack[] | null } | null } | null
+  dash?: {
+    duration: number
+    video: PlayTrack[]
+    audio?: PlayTrack[] | null
+    /** 杜比全景声（E-AC-3）。 */
+    dolby?: { audio?: PlayTrack[] | null } | null
+    /** Hi-Res 无损（FLAC）。 */
+    flac?: { audio?: PlayTrack | null } | null
+  } | null
   /** PGC：片头片尾。 */
   clip_info_list?: { start: number; end: number; clipType?: string }[] | null
   /** PGC：只给试看（`durl` 里几分钟的 MP4，没有 `dash`）时为 1。 */
@@ -71,13 +81,184 @@ export function trackURLs(track: PlayTrack): string[] {
   return [...all.filter((url) => !isPCDN(url)), ...all.filter(isPCDN)]
 }
 
-type Codec = 'avc' | 'hevc'
+/**
+ * 一档画面挑哪条轨：
+ * - SDR 档：H.264 优先（哪儿都能播），再 HEVC（`hvc1`，再 `hev1`，客户端能解 HEVC 时）；AV1 不要（Apple TV 和多数 iPhone 没有硬解）。
+ * - HDR / 杜比视界档（照 App）：`dvh1` / `hvc1` 优先，再 `avc1`，再 `hev1`（HDR10 有时只有它；AVPlayer 能播）。
+ */
+export function preferredTrack(tracks: PlayTrack[], options: { hdr?: boolean; hevc?: boolean } = {}): PlayTrack | undefined {
+  const rank = (track: PlayTrack) => {
+    const c = track.codecs
+    if (options.hdr) return c.startsWith('dvh1') || c.startsWith('hvc1') ? 3 : c.startsWith('avc1') ? 2 : c.startsWith('hev1') ? 1 : 0
+    if (c.startsWith('avc1')) return 3
+    if (options.hevc === false) return 0
+    return c.startsWith('hvc1') ? 2 : c.startsWith('hev1') ? 1 : 0
+  }
+  return tracks.filter((t) => rank(t) > 0).sort((a, b) => rank(b) - rank(a) || b.bandwidth - a.bandwidth)[0]
+}
 
-/** H.264 优先（哪儿都能播），再 HEVC（`hvc1`，再 `hev1`）；AV1 不要（Apple TV 和多数 iPhone 没有硬解），杜比视界不要。 */
-export function preferredTrack(tracks: PlayTrack[]): { track: PlayTrack; codec: Codec } | undefined {
-  const rank = (track: PlayTrack) => (track.codecs.startsWith('avc1') ? 3 : track.codecs.startsWith('hvc1') ? 2 : track.codecs.startsWith('hev1') ? 1 : 0)
-  const best = tracks.filter((t) => rank(t) > 0).sort((a, b) => rank(b) - rank(a) || b.bandwidth - a.bandwidth)[0]
-  return best ? { track: best, codec: best.codecs.startsWith('avc1') ? 'avc' : 'hevc' } : undefined
+/**
+ * HLS 怎么声明一条视频轨（照 App 的 `BiliDashPlaylist.videoFormat`）：杜比视界 profile 8 按它的 HEVC 基础层写 `CODECS`，
+ * 杜比编码写进 `SUPPLEMENTAL-CODECS`（Apple 编写规范的要求）；profile 5 没有基础层，`CODECS` 就是 `dvh1`，`PQ`。HDR 真彩是 PQ，帧率不过 30。
+ */
+export function videoFormat(codecs: string, qn: number, frameRate?: string): { codecs: string; supplementalCodecs?: string; videoRange: 'SDR' | 'PQ' | 'HLG'; frameRate: number } {
+  let rate = Number(frameRate) || 25
+  let range: 'SDR' | 'PQ' | 'HLG' = 'SDR'
+  let declared = codecs
+  let supplemental: string | undefined
+  if (qn === HDR_QN) {
+    range = 'PQ'
+    rate = Math.min(rate, 30)
+  }
+  if (codecs === 'dvh1.08.07' || codecs === 'dvh1.08.03') {
+    supplemental = `${codecs}/db4h`
+    declared = 'hvc1.2.4.L153.b0'
+    range = 'HLG'
+  } else if (codecs === 'dvh1.08.06') {
+    supplemental = `${codecs}/db1p`
+    declared = 'hvc1.2.4.L150'
+    range = 'PQ'
+  } else if (codecs.startsWith('dvh1.05')) {
+    range = 'PQ'
+  }
+  return { codecs: declared, supplementalCodecs: supplemental, videoRange: range, frameRate: Math.min(rate, 60) }
+}
+
+/** 音轨在音频菜单里的名字（照 App）。 */
+export function audioName(track: PlayTrack): string {
+  const c = track.codecs.toLowerCase()
+  if (c.startsWith('ec-3') || c.startsWith('ac-3')) return '杜比全景声'
+  if (c.startsWith('flac')) return '无损音质'
+  return `${Math.round(track.bandwidth / 1000)} kbps`
+}
+
+export interface StreamPlan {
+  id: string
+  quality: { rank: number; label: string }
+  description: string
+  /** 进 master 的画面：第一条是这一档；HDR 档后面跟一条 SDR 回退。 */
+  videos: DashVideoTrack[]
+  hdr: boolean
+  unavailableReason?: string
+  /** HDR 档的 SDR 回退（协议的 `fallback`）。 */
+  fallback?: { peakBandwidths: number[]; label: string }
+}
+
+export interface PlanOptions {
+  /** 客户端能解的编码（`preferences.codecs`）；缺省不限。 */
+  codecs?: string[] | null
+  maxQualityRank?: number | null
+  adaptive?: boolean
+  isVIP: boolean
+  loggedIn: boolean
+}
+
+/**
+ * 这次解析给哪些流（纯函数）：每档一条，HDR / 杜比视界档带 SDR 回退；客户端不能解的编码标不可用；音频按编码分组
+ * （AAC 一定有；杜比全景声在客户端能解 E-AC-3 时；无损只在客户端明确列出 fLaC 时，App 自己也不放无损）。
+ * 默认选清晰度上限内最好的 SDR 档；HDR / 杜比视界只在上限允许、且客户端明确声明能解时才默认选中。
+ */
+export function planStreams(playURL: PlayURL, dash: NonNullable<PlayURL['dash']>, options: PlanOptions) {
+  const { codecs } = options
+  const supports = (codec: string) => codecSupported(codecs, codec)
+  const declares = (codec: string) => Boolean(codecs) && codecSupported(codecs, codec)
+  const cap = options.maxQualityRank ?? Number.POSITIVE_INFINITY
+
+  const best = (tracks: PlayTrack[]) => [...tracks].sort((a, b) => b.bandwidth - a.bandwidth)[0] as PlayTrack | undefined
+  const audioTrack = (track: PlayTrack, isDefault: boolean): DashAudioTrack => {
+    const [url, ...backupURLs] = trackURLs(track)
+    return compact({ url, backupURLs: backupURLs.length ? backupURLs : undefined, codecs: track.codecs, bandwidth: peakBandwidth(track.bandwidth), language: 'zh', name: audioName(track), isDefault })
+  }
+  const aac = best((dash.audio ?? []).filter((a) => a.codecs.startsWith('mp4a')))
+  const dolby = best(dash.dolby?.audio ?? [])
+  const flac = dash.flac?.audio ?? undefined
+  const audios: DashAudioTrack[] = []
+  if (aac) audios.push(audioTrack(aac, true))
+  if (dolby && supports(dolby.codecs)) audios.push(audioTrack(dolby, !aac))
+  if (flac && declares(flac.codecs)) audios.push(audioTrack(flac, !aac))
+  const audioPeak = audios[0]?.bandwidth ?? 0
+
+  const labels = new Map((playURL.support_formats ?? []).map((f) => [f.quality, f.new_description || f.display_desc || '']))
+  const quality = (qn: number) => ({ rank: QUALITY_HEIGHTS[qn] ?? qn, label: labels.get(qn) || QUALITY_LABELS[qn] || String(qn) })
+  const byQuality = new Map<number, PlayTrack[]>()
+  for (const track of dash.video) byQuality.set(track.id, [...(byQuality.get(track.id) ?? []), track])
+
+  const videoTrack = (track: PlayTrack, qn: number): DashVideoTrack => {
+    const format = videoFormat(track.codecs, qn, track.frame_rate ?? track.frameRate)
+    const [url, ...backupURLs] = trackURLs(track)
+    return compact({
+      url, backupURLs: backupURLs.length ? backupURLs : undefined, codecs: format.codecs, supplementalCodecs: format.supplementalCodecs,
+      videoRange: format.videoRange === 'SDR' ? undefined : format.videoRange, bandwidth: peakBandwidth(track.bandwidth),
+      width: track.width, height: track.height, frameRate: format.frameRate,
+    })
+  }
+  const hevc = supports('hvc1')
+  // SDR 屏幕接不了 PQ / HLG：HDR 档带上最好的 SDR 画面作回退变体，播放器自己挑。
+  const sdrFallback = [...byQuality.keys()].filter((qn) => !isHDR(qn)).sort((a, b) => b - a)
+    .map((qn) => ({ qn, track: preferredTrack(byQuality.get(qn)!, { hevc }) })).find((c) => c.track)
+
+  const plans: StreamPlan[] = []
+  const skipped: string[] = []
+  for (const [qn, tracks] of [...byQuality].sort((a, b) => b[0] - a[0])) {
+    const hdr = isHDR(qn)
+    const track = preferredTrack(tracks, { hdr, hevc })
+    if (!track) {
+      const families = [...new Set(tracks.map((t) => codecFamily(t.codecs)))]
+      // 只有客户端解不了的 HEVC：标出来；只有 AV1 之类的：不列。
+      if (families.includes('hvc1') && !hevc) plans.push({ id: String(qn), quality: quality(qn), description: 'HEVC', videos: [], hdr, unavailableReason: '设备不支持 HEVC' })
+      else skipped.push(`${qn}:${families.join('/')}`)
+      continue
+    }
+    const video = videoTrack(track, qn)
+    // 杜比视界要客户端能解 dvh1（profile 8 还要能解它的 HEVC 基础层）；HDR 真彩要能解 HEVC。
+    const needed = [video.codecs, ...(video.supplementalCodecs ? [video.supplementalCodecs.split('/')[0]] : [])]
+    const missing = needed.find((codec) => !supports(codec))
+    const range = video.videoRange ? ` ${video.videoRange}` : ''
+    const description = `${track.codecs} ${track.width ?? 0}x${track.height ?? 0} ${Math.round(track.bandwidth / 1000)}kbps${range}${codecFamily(track.codecs) === 'hvc1' ? '（HEVC）' : codecFamily(track.codecs) === 'dvh1' ? '（杜比视界）' : ''}`
+    if (missing) {
+      plans.push({ id: String(qn), quality: quality(qn), description, videos: [], hdr, unavailableReason: `设备不支持${codecName(missing)}` })
+      continue
+    }
+    const plan: StreamPlan = { id: String(qn), quality: quality(qn), description, videos: [video], hdr }
+    if (hdr && sdrFallback?.track) {
+      const fallback = videoTrack(sdrFallback.track, sdrFallback.qn)
+      plan.videos.push(fallback)
+      plan.fallback = { peakBandwidths: [fallback.bandwidth + audioPeak], label: 'SDR' }
+    }
+    plans.push(plan)
+  }
+  const playable = plans.filter((p) => !p.unavailableReason)
+  if (playable.length === 0) return { plans, audios, selected: undefined, skipped }
+
+  if (options.adaptive) {
+    // 自动清晰度只用 SDR 档（照 App）。
+    const sdr = playable.filter((p) => !p.hdr)
+    const within = sdr.filter((p) => p.quality.rank <= cap)
+    const ladder = within.length ? within : sdr.length ? [sdr.at(-1)!] : [playable.at(-1)!]
+    const auto: StreamPlan = {
+      id: 'auto', quality: { rank: ladder[0].quality.rank, label: '自动' }, hdr: false,
+      description: `adaptive ${ladder.map((p) => p.id).join('/')}`, videos: ladder.map((p) => p.videos[0]),
+    }
+    return { plans: [auto], audios, selected: 'auto', skipped }
+  }
+
+  // 列在 `accept_quality` 里却没有轨道的（账号看不了）：标为不可用。
+  for (const qn of playURL.accept_quality ?? []) {
+    if (byQuality.has(qn)) continue
+    const reason = qn >= VIP_THRESHOLD && !options.isVIP ? '大会员' : !options.loggedIn ? '需登录' : '不可用'
+    plans.push({ id: String(qn), quality: quality(qn), description: reason, videos: [], hdr: isHDR(qn), unavailableReason: reason })
+  }
+  plans.sort((a, b) => b.quality.rank - a.quality.rank || Number(b.id) - Number(a.id))
+  const eligible = (p: StreamPlan) => {
+    if (p.unavailableReason) return false
+    if (!p.hdr) return true
+    const codec = p.id === String(DOLBY_VISION_QN) ? 'dvh1' : 'hvc1'
+    return declares(codec) && p.quality.rank <= cap
+  }
+  const chosen = plans.find((p) => eligible(p) && p.quality.rank <= cap)
+    ?? [...plans].reverse().find((p) => !p.unavailableReason && !p.hdr)
+    ?? plans.find((p) => !p.unavailableReason)
+  return { plans, audios, selected: chosen?.id, skipped }
 }
 
 /** 每段峰值约是平均码率的 1.5 倍（master 的 BANDWIDTH 要峰值）。 */
@@ -233,61 +414,23 @@ export class Playback {
     const subtitles = this.subtitles(target, player, dash.duration, ctx, ttl)
     const renditions = subtitles.map((s) => s.rendition)
 
-    // 最好的一条 AAC。杜比（E-AC-3）和无损不放进同一组：编码不同的音轨混在一组里，有的设备会挑错。
-    const aac = (dash.audio ?? []).filter((a) => a.codecs.startsWith('mp4a')).sort((a, b) => b.bandwidth - a.bandwidth)[0]
-    const audios: DashAudioTrack[] = aac ? [{ url: trackURLs(aac)[0], codecs: aac.codecs, bandwidth: peakBandwidth(aac.bandwidth), language: 'zh', name: '普通话', isDefault: true }] : []
-
-    const labels = new Map((playURL.support_formats ?? []).map((f) => [f.quality, f.new_description || f.display_desc || '']))
-    const quality = (qn: number) => ({ rank: QUALITY_HEIGHTS[qn] ?? qn, label: labels.get(qn) || QUALITY_LABELS[qn] || String(qn) })
-    const byQuality = new Map<number, PlayTrack[]>()
-    for (const track of dash.video) byQuality.set(track.id, [...(byQuality.get(track.id) ?? []), track])
-
-    const cap = request.preferences?.maxQualityRank ?? Number.POSITIVE_INFINITY
-    const playable: { qn: number; video: DashVideoTrack; codec: Codec; description: string }[] = []
-    const skipped: string[] = []
-    for (const [qn, tracks] of [...byQuality].sort((a, b) => b[0] - a[0])) {
-      if (HDR.has(qn)) {
-        skipped.push(`${qn}:hdr`)
-        continue
-      }
-      const chosen = preferredTrack(tracks)
-      if (!chosen) {
-        skipped.push(`${qn}:${tracks.map((t) => t.codecs.split('.')[0]).join('/')}`)
-        continue
-      }
-      const { track, codec } = chosen
-      playable.push({
-        qn,
-        codec,
-        video: compact({ url: trackURLs(track)[0], codecs: track.codecs, bandwidth: peakBandwidth(track.bandwidth), width: track.width, height: track.height, frameRate: Number(track.frame_rate ?? track.frameRate) || undefined }),
-        description: `${track.codecs} ${track.width ?? 0}x${track.height ?? 0} ${Math.round(track.bandwidth / 1000)}kbps${codec === 'hevc' ? '（HEVC）' : ''}`,
-      })
-    }
-    if (playable.length === 0) throw new SourceError('unplayable', '没有可播放的清晰度')
-
-    const dashURL = (videos: DashVideoTrack[]) => ctx.media.dash({ videos, audios, subtitles: renditions }, { headers, via: 'proxy', ttl })
-    const streams: Stream[] = []
-    if (request.preferences?.adaptive) {
-      const within = playable.filter((p) => quality(p.qn).rank <= cap)
-      const ladder = within.length ? within : [playable.at(-1)!]
-      streams.push({
-        id: 'auto', url: dashURL(ladder.map((p) => p.video)), format: 'hls', quality: { rank: quality(ladder[0].qn).rank, label: '自动' },
-        description: `adaptive ${ladder.map((p) => p.qn).join('/')}${ladder.some((p) => p.codec === 'hevc') ? '（含 HEVC）' : ''}`,
-      })
-    } else {
-      for (const p of playable) {
-        streams.push({ id: String(p.qn), url: dashURL([p.video]), format: 'hls', quality: quality(p.qn), description: p.description })
-      }
-      // 列在 `accept_quality` 里却没有轨道的（账号看不了）：标为不可用。
-      for (const qn of playURL.accept_quality ?? []) {
-        if (byQuality.has(qn) || HDR.has(qn)) continue
-        const reason = qn >= VIP_THRESHOLD && !this.session.isVIP ? '大会员' : !this.session.loggedIn ? '需登录' : '不可用'
-        streams.push({ id: String(qn), url: 'about:blank', format: 'hls', quality: quality(qn), description: reason, unavailableReason: reason })
-      }
-      streams.sort((a, b) => b.quality.rank - a.quality.rank || Number(b.id) - Number(a.id))
-    }
-    const available = streams.filter((s) => !s.unavailableReason)
-    const selected = available.find((s) => s.quality.rank <= cap) ?? available.at(-1)!
+    const plan = planStreams(playURL, dash, {
+      codecs: request.preferences?.codecs, maxQualityRank: request.preferences?.maxQualityRank, adaptive: request.preferences?.adaptive,
+      isVIP: this.session.isVIP, loggedIn: this.session.loggedIn,
+    })
+    if (!plan.selected) throw new SourceError('unplayable', '没有可播放的清晰度')
+    const streams: Stream[] = plan.plans.map((p) => compact({
+      id: p.id,
+      url: p.videos.length ? ctx.media.dash({ videos: p.videos, audios: plan.audios, subtitles: renditions }, { headers, via: 'proxy', ttl }) : 'about:blank',
+      format: 'hls' as const,
+      quality: p.quality,
+      description: p.description,
+      unavailableReason: p.unavailableReason,
+      fallback: p.fallback,
+    }))
+    const selected = { id: plan.selected }
+    const skipped = plan.skipped
+    const audioCodecs = plan.audios.map((a) => a.codecs).join('+') || 'none'
 
     const reportContext = compact({
       cid: String(target.cid), type: target.epid ? '4' : '3', aid: target.aid ? String(target.aid) : undefined, bvid: target.bvid,
@@ -305,7 +448,7 @@ export class Playback {
       reportContext,
       diagnostics: {
         path: target.epid ? 'pgc-dash-proxy' : 'ugc-dash-proxy',
-        audio: aac?.codecs ?? 'none',
+        audio: audioCodecs,
         skipped: skipped.join(',') || 'none',
         vip: String(this.session.isVIP),
       },

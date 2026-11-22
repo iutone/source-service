@@ -88,7 +88,8 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   const media = new MediaGateway({ secret: serverId, persistent: new KeyValueStore(join(options.dataDir, 'media')) })
   const logins = new LoginSessions()
   const requestLog = new RequestLog()
-  const app = Fastify({ logger: options.logger ?? false, trustProxy: false, bodyLimit: 1 << 20, exposeHeadRoutes: false })
+  // maxParamLength：FairPlay 的 `ref`、字幕的 ref 等路径参数可能较长（Fastify 默认 100，超了回 414）。
+  const app = Fastify({ logger: options.logger ?? false, trustProxy: false, bodyLimit: 1 << 20, exposeHeadRoutes: false, maxParamLength: 2048 })
 
   const routes: string[] = []
   app.addHook('onRoute', (route) => {
@@ -251,7 +252,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
       danmaku: plugin.danmaku ? { segmentDuration: plugin.danmaku.segmentDuration } : null,
       subtitles: Boolean(plugin.playback.cues),
       progress: Boolean(plugin.playback.progress),
-      fairPlay: false,
+      fairPlay: Boolean(plugin.playback.fairPlay),
     }
     return {
       id,
@@ -570,6 +571,25 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     if (entry.plugin.playback.progress) await entry.plugin.playback.progress(input, context(request, entry))
     reply.code(204)
   })
+  // FairPlay 许可转发（§6.4）：证书原样给，SPC 原样收、CKC 原样回。
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, payload, done) => done(null, payload))
+  app.get(`${S}/fairplay/:ref/cert`, async (request, reply) => {
+    const entry = source(request)
+    const fairPlay = requiredModule(entry.plugin.playback.fairPlay, 'FairPlay')
+    const bytes = await fairPlay.certificate((request.params as { ref: string }).ref, context(request, entry))
+    reply.header('content-type', 'application/octet-stream').header('cache-control', 'max-age=3600')
+    return Buffer.from(bytes)
+  })
+  app.post(`${S}/fairplay/:ref/license`, async (request, reply) => {
+    const entry = source(request)
+    const fairPlay = requiredModule(entry.plugin.playback.fairPlay, 'FairPlay')
+    const spc = request.body
+    if (!(spc instanceof Uint8Array) || spc.length === 0) throw badRequest('请求体应是 SPC 的原始字节（application/octet-stream）')
+    const ckc = await fairPlay.license((request.params as { ref: string }).ref, spc, context(request, entry))
+    reply.header('content-type', 'application/octet-stream').header('cache-control', 'no-store')
+    return Buffer.from(ckc)
+  })
+
   app.get(`${S}/subtitles/:ref/:key`, async (request) => {
     const entry = source(request)
     const { ref, key } = request.params as { ref: string; key: string }

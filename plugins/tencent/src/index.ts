@@ -201,6 +201,15 @@ export function createTencentSource(options: TencentOptions = {}): SourcePlugin 
       progress(request, ctx) {
         return use(ctx).playback.progress(request, ctx)
       },
+      // 版权方加密片（drm 4：TS + SAMPLE-AES，skd://）的证书和许可，照网页播放器转发（SERVER.md §6.4）。
+      fairPlay: {
+        certificate(ref, ctx) {
+          return use(ctx).playback.certificate(ref, ctx)
+        },
+        license(ref, spc, ctx) {
+          return use(ctx).playback.license(ref, spc, ctx)
+        },
+      },
     },
 
     links: {

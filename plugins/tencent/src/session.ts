@@ -47,6 +47,8 @@ export interface RequestOptions {
   method?: 'GET' | 'POST'
   query?: Record<string, string>
   body?: unknown
+  /** 原样发的请求体（表单）；有它就不用 `body`。 */
+  rawBody?: string
   contentType?: string
   headers?: Record<string, string>
   /** 省略时带登录 cookie（`loginCookies`）。 */
@@ -233,6 +235,12 @@ export class TencentSession {
     return profile
   }
 
+  /** 有效会员的档次（`VIP` / `SVIP`），没有时 undefined。 */
+  get membershipTier(): string | undefined {
+    const membership = this.profileCache?.profile.membership
+    return membership?.active ? membership.tier : undefined
+  }
+
   /** 会员状态（播放选清晰度用）：没读过就读一次。 */
   async ensureMembership(signal?: AbortSignal): Promise<void> {
     if (!this.loggedIn || this.profileCache) return
@@ -305,7 +313,7 @@ export class TencentSession {
     let body: string | undefined
     if (options.method === 'POST') {
       headers['content-type'] = options.contentType ?? 'application/json'
-      body = JSON.stringify(options.body ?? {})
+      body = options.rawBody ?? JSON.stringify(options.body ?? {})
     }
     for (const [name, value] of Object.entries(options.headers ?? {})) headers[name.toLowerCase()] = value
     let response: Response

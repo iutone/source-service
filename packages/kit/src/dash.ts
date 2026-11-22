@@ -125,18 +125,28 @@ export function byteRangePlaylist(uri: string, index: SegmentIndex): string {
   return lines.join('\n')
 }
 
+export type VideoRange = 'SDR' | 'PQ' | 'HLG'
+
 export interface DashVideoTrack {
   url: string
+  /** 同一个文件的备用地址（备用 CDN）：网关取 `url` 失败时依次换用。 */
+  backupURLs?: string[]
   codecs: string
   /** 峰值码率，bit/s。 */
   bandwidth: number
   width?: number
   height?: number
   frameRate?: number
+  /** 写进 `VIDEO-RANGE`；省略时不写（播放器当 SDR）。HDR10 / HDR Vivid 是 `PQ`，杜比视界 8.4 是 `HLG`。 */
+  videoRange?: VideoRange
+  /** 写进 `SUPPLEMENTAL-CODECS`：杜比视界 profile 8 的 `dvh1.08.07/db4h`（`CODECS` 是它的 HEVC 基础层）。 */
+  supplementalCodecs?: string
 }
 
 export interface DashAudioTrack {
   url: string
+  /** 同一个文件的备用地址（备用 CDN）。 */
+  backupURLs?: string[]
   codecs: string
   bandwidth: number
   /** BCP 47。 */
@@ -145,32 +155,73 @@ export interface DashAudioTrack {
   isDefault?: boolean
 }
 
-/** master：视频变体（可多个清晰度）引用同一组音频。`uri(kind, index)` 给出各自媒体播放列表的地址。 */
+/** 音频按编码家族分组（`mp4a`、`ec-3`、`ac-3`、`flac`…）。 */
+export function audioFamily(codecs: string): string {
+  const head = codecs.trim().toLowerCase().split('.')[0]
+  return head === 'eac3' ? 'ec-3' : head === 'ac3' ? 'ac-3' : head
+}
+
+/**
+ * 音轨按编码分组：第一组（第一条音轨的编码）叫 `audio`，其余叫 `audio-<编码>`（如 `audio-ec-3`、`audio-flac`）。
+ * 只有一种编码时和以前一样只有一组 `audio`。
+ */
+export function audioGroups(audios: DashAudioTrack[]): { id: string; family: string; members: number[] }[] {
+  const groups: { id: string; family: string; members: number[] }[] = []
+  audios.forEach((audio, index) => {
+    const family = audioFamily(audio.codecs)
+    let group = groups.find((g) => g.family === family)
+    if (!group) {
+      group = { id: groups.length === 0 ? 'audio' : `audio-${family.replace(/[^a-z0-9-]/g, '')}`, family, members: [] }
+      groups.push(group)
+    }
+    group.members.push(index)
+  })
+  return groups
+}
+
+/**
+ * master：视频变体（可多个清晰度）引用音频组。`uri(kind, index)` 给出各自媒体播放列表的地址。
+ * 音频有几种编码（AAC、杜比 E-AC-3、无损 FLAC）就分几组；每个画面按音频组各出一个变体，`CODECS` 写这一组的音频编码，
+ * 播放器按自己能解的挑（Apple 的 HLS 编写规范就是这样写多种音频编码的）。变体按视频的顺序，同一画面内按音频组的顺序。
+ */
 export function dashMaster(videos: DashVideoTrack[], audios: DashAudioTrack[], uri: (kind: 'video' | 'audio', index: number) => string): string {
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS']
-  audios.forEach((audio, index) => {
-    const attributes = [
-      'TYPE=AUDIO',
-      'GROUP-ID="audio"',
-      `NAME="${audio.name.replaceAll('"', "'")}"`,
-      audio.language ? `LANGUAGE="${audio.language}"` : undefined,
-      `DEFAULT=${audio.isDefault || (index === 0 && !audios.some((a) => a.isDefault)) ? 'YES' : 'NO'}`,
-      'AUTOSELECT=YES',
-      `URI="${uri('audio', index)}"`,
-    ].filter(Boolean)
-    lines.push(`#EXT-X-MEDIA:${attributes.join(',')}`)
-  })
-  const audioBandwidth = Math.max(0, ...audios.map((audio) => audio.bandwidth))
-  const audioCodecs = [...new Set(audios.map((audio) => audio.codecs))]
-  videos.forEach((video, index) => {
+  const groups = audioGroups(audios)
+  for (const group of groups) {
+    const members = group.members.map((index) => audios[index])
+    const explicit = members.findIndex((a) => a.isDefault)
+    group.members.forEach((index, position) => {
+      const audio = audios[index]
+      const attributes = [
+        'TYPE=AUDIO',
+        `GROUP-ID="${group.id}"`,
+        `NAME="${audio.name.replaceAll('"', "'")}"`,
+        audio.language ? `LANGUAGE="${audio.language}"` : undefined,
+        `DEFAULT=${position === (explicit >= 0 ? explicit : 0) ? 'YES' : 'NO'}`,
+        'AUTOSELECT=YES',
+        `URI="${uri('audio', index)}"`,
+      ].filter(Boolean)
+      lines.push(`#EXT-X-MEDIA:${attributes.join(',')}`)
+    })
+  }
+  const variant = (video: DashVideoTrack, index: number, group?: { id: string; members: number[] }) => {
+    const members = group ? group.members.map((i) => audios[i]) : []
+    const audioBandwidth = Math.max(0, ...members.map((audio) => audio.bandwidth))
+    const audioCodecs = [...new Set(members.map((audio) => audio.codecs))]
     const attributes = [
       `BANDWIDTH=${Math.round(video.bandwidth + audioBandwidth)}`,
       `CODECS="${[video.codecs, ...audioCodecs].join(',')}"`,
+      video.supplementalCodecs ? `SUPPLEMENTAL-CODECS="${video.supplementalCodecs}"` : undefined,
       video.width && video.height ? `RESOLUTION=${video.width}x${video.height}` : undefined,
       video.frameRate ? `FRAME-RATE=${video.frameRate.toFixed(3)}` : undefined,
-      audios.length ? 'AUDIO="audio"' : undefined,
+      video.videoRange ? `VIDEO-RANGE=${video.videoRange}` : undefined,
+      group ? `AUDIO="${group.id}"` : undefined,
     ].filter(Boolean)
     lines.push(`#EXT-X-STREAM-INF:${attributes.join(',')}`, uri('video', index))
+  }
+  videos.forEach((video, index) => {
+    if (groups.length === 0) variant(video, index)
+    else for (const group of groups) variant(video, index, group)
   })
   lines.push('')
   return lines.join('\n')

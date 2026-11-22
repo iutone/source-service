@@ -114,3 +114,22 @@ describe.skipIf(!live || !cookie)('爱奇艺 live（登录）', () => {
     })
   }, 120_000)
 })
+
+// 加密片（FairPlay）：要中国大陆出口（境外出口 `dash` 回 502）。IQIYI_FAIRPLAY=1 IQIYI_COOKIE=… 时跑；
+// 非会员拿到的是 6 分钟试看，许可用伪造的 SPC 打，应得到平台的拒绝（restricted）。
+describe.skipIf(!live || !cookie || process.env.IQIYI_FAIRPLAY !== '1')('爱奇艺 live（FairPlay）', () => {
+  it('《疯狂动物城》给出带 fairPlay 的流、证书、平台对伪造 SPC 的拒绝', async () => {
+    const store = new KeyValueStore(mkdtempSync(join(tmpdir(), 'iyt-iqiyi-fp-')))
+    store.set('credential', { cookies: cookies(cookie!) })
+    const media = new MediaGateway()
+    const ctx = { sourceId: 'iqiyi', store, media, log: console, signal: AbortSignal.timeout(60_000) } as unknown as Ctx
+    const plugin = createIQiyiSource()
+    const result = await plugin.playback.resolve({ video: 'v481997300', preferences: {} }, ctx)
+    const stream = result.streams.find((s) => s.fairPlay && !s.unavailableReason)
+    expect(stream?.keepable).toBe(false)
+    const ref = decodeURIComponent(stream!.fairPlay!.certificate.split('/')[6])
+    expect((await plugin.playback.fairPlay!.certificate(ref, ctx)).length).toBe(1295)
+    await expect(plugin.playback.fairPlay!.license(ref, new Uint8Array(2048).fill(1), ctx)).rejects.toMatchObject({ code: 'restricted' })
+    media.close()
+  }, 90_000)
+})

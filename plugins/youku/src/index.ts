@@ -4,12 +4,14 @@
 // 随镜像发布在 /app/plugins/youku，默认不启用：在 config.yaml 的 sources 里按路径加上。
 import { fileURLToPath } from 'node:url'
 import type { Channel, Channels, PlaybackMedia, Stream } from '@iyt-source/protocol'
-import { SourceError, badRequest, type Ctx, type SourceFactory, type SourcePlugin } from '@iyt-source/kit'
+import type { J } from './json.ts'
+import { SourceError, badRequest, fairPlayEndpoints, type Ctx, type SourceFactory, type SourcePlugin } from '@iyt-source/kit'
 import { YoukuDetail } from './detail.ts'
 import { FALLBACK_CHANNELS, FILTER_CATEGORIES, HOME_CHANNEL, PINNED_CHANNELS, YoukuFeed, YoukuFilter, channelFilterCategories } from './feed.ts'
 import { YoukuHistory, fetchDanmaku } from './history.ts'
 import { LINK_PATTERNS, resolveLink } from './links.ts'
-import { UPSError, callUPS, checkUPS, isVip, languages, mediaFrom, pickStreams, reportProgress, upsParameters, type RawStream } from './playback.ts'
+import { UPSError, callUPS, checkUPS, isVip, languages, mediaFrom, mergeStreams, pickStreams, reportProgress, upsParameters, type RawStream } from './playback.ts'
+import { CERTIFICATE_REQUEST, FairPlayRefs, fairPlayPlaylist, postLicense } from './fairplay.ts'
 import { PrivateKeySession, PrivatePipeline, privateEngineAvailable } from './private.ts'
 import { YoukuSearch } from './search.ts'
 import { LOGIN_COOKIES, WEB_LOGIN_URL, YoukuSession, publicProfile, sleep } from './session.ts'
@@ -18,12 +20,21 @@ export interface YoukuOptions {
   name?: string
   /** 优酷私有加密 / HEVC TS 的清晰度在服务端解密、转封装（默认开）。关掉就只给明文流。 */
   privateStreams?: boolean
+  /** FairPlay（cbcs）档：设备上解密，服务端只转发许可（默认开）。 */
+  fairPlay?: boolean
   /** 声明 H.265（私有流开着时）：有 4K、更省流量，但转封装更吃 CPU。默认开。 */
   hevc?: boolean
 }
 
 const CHANNELS_TTL = 3600_000
 const SEARCH_TTL = 10 * 60_000
+
+interface UPSAnswer {
+  data: J
+  keySession?: PrivateKeySession
+  /** 这次请求声明了 FairPlay。 */
+  declared: boolean
+}
 
 const factory: SourceFactory = (options, env) => createYoukuSource(options as YoukuOptions, env)
 export default factory
@@ -40,6 +51,9 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
     const cna = await session.ensureCna(signal)
     return { uid: (session.profile ?? (await session.refreshProfile())).id, cna }
   })
+  const useFairPlay = options.fairPlay !== false
+  let certificate: { at: number; bytes: Buffer } | undefined
+  const refs = new FairPlayRefs()
   const usePrivate = options.privateStreams !== false && privateEngineAvailable()
   const pipeline = usePrivate ? new PrivatePipeline(env?.log) : undefined
   let channelsCache: { at: number; channels: Channel[] } | undefined
@@ -50,6 +64,7 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
   let warmed = false
   const use = (ctx: Ctx) => {
     session.attach(ctx)
+    refs.attach(ctx.store)
     if (!warmed) {
       // 生成 ckey 要取两个脚本再跑一遍（几秒）：服务第一次被访问时就在后台做，不等到第一次播放。
       warmed = true
@@ -89,12 +104,26 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
   // MARK: 播放
 
   /** 一次 UPS：私有流开着时带上这次的私有会话。 */
-  async function ups(video: string, ckey: string, ctx: Ctx) {
-    const keySession = pipeline ? new PrivateKeySession() : undefined
+  async function ups(video: string, ckey: string, ctx: Ctx): Promise<UPSAnswer & { fairPlay?: UPSAnswer }> {
     const cna = await session.ensureCna(ctx.signal)
-    const data = await callUPS(session.mtop, upsParameters({ vid: video, ckey, utid: cna, privateClient: keySession?.client, hevc: options.hevc !== false }), ctx.signal)
-    checkUPS(data)
-    return { data, keySession }
+    const once = async (fairPlay: boolean): Promise<UPSAnswer> => {
+      const keySession = pipeline ? new PrivateKeySession() : undefined
+      const data = await callUPS(session.mtop, upsParameters({
+        vid: video, ckey, utid: cna, privateClient: keySession?.client, hevc: options.hevc !== false, fairPlay,
+      }), ctx.signal)
+      checkUPS(data)
+      return { data, keySession, declared: fairPlay }
+    }
+    // 声明了 FairPlay，UPS 只给 cbcs（和会员的私有流），明文档就没了：两种各问一次，合在一起按清晰度排（FAIRPLAY.md §6 的 A + B）。
+    const [plain, fairPlay] = await Promise.allSettled([once(false), useFairPlay ? once(true) : Promise.reject(new Error('off'))])
+    if (plain.status === 'fulfilled') {
+      if (fairPlay.status === 'rejected' && useFairPlay && !ctx.signal.aborted) ctx.log.warn('youku fairplay ups failed', { error: String(fairPlay.reason) })
+      return { ...plain.value, fairPlay: fairPlay.status === 'fulfilled' ? fairPlay.value : undefined }
+    }
+    // 只有 FairPlay 版本的片子（-4008）等：明文那次失败、FairPlay 那次成功就用它。ckey 的问题照样交给重试。
+    const reason = plain.reason
+    if (fairPlay.status === 'fulfilled' && !(reason instanceof UPSError && (reason.upsCode === -6004 || reason.upsCode === -6005))) return fairPlay.value
+    throw reason
   }
 
   /**
@@ -148,6 +177,20 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
     const language = multi ? { code: raw.languageCode, name: names.get(raw.languageCode) ?? raw.languageCode } : undefined
     let url = raw.url
     let description = `${raw.streamType} ${raw.drm} ${raw.height}p`
+    if (raw.path === 'fairplay' && raw.licenseURL) {
+      return {
+        id: raw.id,
+        // 补上 key 标签的播放列表经网关给；有效期跟 UPS 地址的（5 小时）。
+        url: fairPlayPlaylist(ctx.media, raw.url, 5 * 3600),
+        format: 'hls',
+        quality: raw.quality,
+        language,
+        description: `${description} fairplay`,
+        fairPlay: fairPlayEndpoints(ctx.sourceId, refs.register(raw.licenseURL)),
+        // 加密的，缓存了也放不出来。
+        keepable: false,
+      }
+    }
     if ((raw.path === 'private' || raw.path === 'remux') && pipeline) {
       url = pipeline.register(raw.url, raw.key, ctx)
       description += raw.path === 'private' ? ' decrypted' : ' remuxed'
@@ -331,8 +374,13 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
     playback: {
       async resolve(request, ctx): Promise<PlaybackMedia> {
         use(ctx)
-        const { data, keySession } = await upsWithRetry(request.video, ctx)
-        const raw = pickStreams(data, { privateClient: keySession, canProcess: Boolean(pipeline), log: (m) => ctx.log.warn(m) })
+        const { data, keySession, declared, fairPlay } = await upsWithRetry(request.video, ctx)
+        const canProcess = Boolean(pipeline)
+        const log = (m: string) => ctx.log.warn(m)
+        const raw = mergeStreams([
+          pickStreams(data, { privateClient: keySession, canProcess, fairPlay: declared, log }),
+          fairPlay ? pickStreams(fairPlay.data, { privateClient: fairPlay.keySession, canProcess, fairPlay: true, log }) : [],
+        ], canProcess)
         const { multi, names } = languages(data)
         const streams = raw.map((s) => toStream(s, names, multi, ctx))
         const counts = raw.reduce<Record<string, number>>((acc, s) => ((acc[s.path] = (acc[s.path] ?? 0) + 1), acc), {})
@@ -344,6 +392,21 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
           vip: String(isVip(data)),
         }, raw.map((s) => s.url))
       },
+      fairPlay: useFairPlay ? {
+        async certificate(ref, ctx) {
+          // 证书（Apple 签给优酷的那张）不随片子变：缓存半天。
+          use(ctx)
+          const url = refs.resolve(ref)
+          if (!certificate || Date.now() - certificate.at > 12 * 3600_000) {
+            certificate = { at: Date.now(), bytes: await postLicense(url, CERTIFICATE_REQUEST, ctx.signal) }
+          }
+          return certificate.bytes
+        },
+        async license(ref, spc, ctx) {
+          use(ctx)
+          return postLicense(refs.resolve(ref), Buffer.from(spc).toString('base64'), ctx.signal)
+        },
+      } : undefined,
       async progress(request, ctx) {
         use(ctx)
         // 没登录时优酷不记历史，也就不报。

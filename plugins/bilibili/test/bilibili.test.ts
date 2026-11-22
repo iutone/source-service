@@ -8,7 +8,7 @@ import {
   archiveItem, cuesToVTT, dynamicItem, historyItem, parseCount, parseDanmakuSegment, parseDuration, plainTitle, replyComment,
   searchSeason, searchVideo, seasonItem, subtitleCues,
 } from '../src/models.ts'
-import { clipMarkers, expiry, isPCDN, preferredTrack, subtitleList, trackURLs, type PlayTrack } from '../src/playback.ts'
+import { audioName, clipMarkers, expiry, isPCDN, planStreams, preferredTrack, subtitleList, trackURLs, videoFormat, type PlayTrack, type PlayURL } from '../src/playback.ts'
 import { apiError, credentialOf, image, navMembership } from '../src/session.ts'
 import { appSigned, APP_SECRET, md5, mixinKey, query, wbiKey, wbiSigned } from '../src/sign.ts'
 
@@ -267,10 +267,21 @@ describe('播放', () => {
   const track = (codecs: string, bandwidth: number, url = 'https://upos-sz-mirrorcos.bilivideo.com/a.m4s?deadline=2000000000'): PlayTrack =>
     ({ id: 80, base_url: url, backup_url: ['https://x.mcdn.bilivideo.cn:4483/a.m4s'], bandwidth, codecs })
 
-  it('H.264 优先，再 HEVC；AV1 不要', () => {
-    expect(preferredTrack([track('av01.0.08M.08', 1), track('hev1.1.6.L120.90', 2), track('avc1.640032', 3)])?.codec).toBe('avc')
-    expect(preferredTrack([track('av01.0.08M.08', 1), track('hev1.1.6.L120.90', 2), track('hvc1.1.6.L120.90', 1)])?.track.codecs).toBe('hvc1.1.6.L120.90')
+  it('SDR 档 H.264 优先，再 HEVC；AV1 不要；HDR 档 dvh1 / hvc1 优先', () => {
+    expect(preferredTrack([track('av01.0.08M.08', 1), track('hev1.1.6.L120.90', 2), track('avc1.640032', 3)])?.codecs).toBe('avc1.640032')
+    expect(preferredTrack([track('av01.0.08M.08', 1), track('hev1.1.6.L120.90', 2), track('hvc1.1.6.L120.90', 1)])?.codecs).toBe('hvc1.1.6.L120.90')
+    expect(preferredTrack([track('hev1.1.6.L120.90', 2)], { hevc: false })).toBeUndefined()
     expect(preferredTrack([track('av01.0.08M.08', 1)])).toBeUndefined()
+    expect(preferredTrack([track('avc1.640032', 3), track('hev1.2.4.L153.90', 2)], { hdr: true })?.codecs).toBe('avc1.640032')
+    expect(preferredTrack([track('dvh1.08.07', 1), track('av01.0.13M.10', 9)], { hdr: true })?.codecs).toBe('dvh1.08.07')
+  })
+
+  it('HDR / 杜比视界的声明照 App', () => {
+    expect(videoFormat('hev1.2.4.L153.90', 125, '50')).toEqual({ codecs: 'hev1.2.4.L153.90', videoRange: 'PQ', frameRate: 30, supplementalCodecs: undefined })
+    expect(videoFormat('dvh1.08.07', 126, '25')).toEqual({ codecs: 'hvc1.2.4.L153.b0', supplementalCodecs: 'dvh1.08.07/db4h', videoRange: 'HLG', frameRate: 25 })
+    expect(videoFormat('dvh1.08.06', 126)).toMatchObject({ codecs: 'hvc1.2.4.L150', supplementalCodecs: 'dvh1.08.06/db1p', videoRange: 'PQ' })
+    expect(videoFormat('dvh1.05.06', 126)).toMatchObject({ codecs: 'dvh1.05.06', supplementalCodecs: undefined, videoRange: 'PQ' })
+    expect(videoFormat('avc1.640032', 80, '29.97')).toMatchObject({ videoRange: 'SDR', frameRate: 29.97 })
   })
 
   it('PCDN 排最后', () => {
@@ -305,6 +316,62 @@ describe('播放', () => {
     const cues = subtitleCues({ body: [{ from: 1.5, to: 3, content: '你好' }, { from: 3661.25, to: 3662, content: '再见' }] })
     expect(cues).toEqual([{ start: 1.5, end: 3, text: '你好' }, { start: 3661.25, end: 3662, text: '再见' }])
     expect(cuesToVTT(cues)).toBe('WEBVTT\n\n00:00:01.500 --> 00:00:03.000\n你好\n\n01:01:01.250 --> 01:01:02.000\n再见\n')
+  })
+})
+
+describe('流的挑选', () => {
+  const t = (id: number, codecs: string, bandwidth: number, height = 2160): PlayTrack =>
+    ({ id, base_url: `https://upos-sz-mirrorcos.bilivideo.com/${id}-${codecs}.m4s`, backup_url: [`https://cn-gd.bilivideo.com/${id}-${codecs}.m4s`], bandwidth, codecs, width: height * 16 / 9, height, frame_rate: '25' })
+  const playURL: PlayURL = {
+    accept_quality: [127, 126, 125, 120, 80, 64],
+    support_formats: [{ quality: 126, new_description: '杜比视界' }, { quality: 125, new_description: 'HDR 真彩色' }, { quality: 80, new_description: '1080P 高清' }],
+    dash: {
+      duration: 100,
+      video: [
+        t(126, 'dvh1.08.07', 20_000_000), t(125, 'hev1.2.4.L153.90', 18_000_000), t(120, 'hev1.1.6.L153.90', 15_000_000),
+        t(80, 'avc1.640032', 3_000_000, 1080), t(80, 'hev1.1.6.L120.90', 1_500_000, 1080), t(64, 'av01.0.08M.08', 800_000, 720),
+      ],
+      audio: [{ id: 30280, base_url: 'https://upos/a.m4s', bandwidth: 320_000, codecs: 'mp4a.40.2' }, { id: 30216, base_url: 'https://upos/b.m4s', bandwidth: 64_000, codecs: 'mp4a.40.2' }],
+      dolby: { audio: [{ id: 30250, base_url: 'https://upos/d.m4s', bandwidth: 768_000, codecs: 'ec-3' }] },
+      flac: { audio: { id: 30251, base_url: 'https://upos/f.m4s', bandwidth: 1_500_000, codecs: 'fLaC' } },
+    },
+  }
+  const plan = (options: Partial<Parameters<typeof planStreams>[2]> = {}) => planStreams(playURL, playURL.dash!, { isVIP: true, loggedIn: true, ...options })
+
+  it('不限编码：每档一条，HDR 带 SDR 回退，杜比音轨分组，无损不给；默认选 SDR 最好的一档', () => {
+    const result = plan()
+    expect(result.plans.map((p) => [p.id, p.unavailableReason ?? 'ok'])).toEqual([['127', '不可用'], ['126', 'ok'], ['125', 'ok'], ['120', 'ok'], ['80', 'ok']])
+    expect(result.skipped).toEqual(['64:av01'])
+    expect(result.selected).toBe('120')
+    const dv = result.plans.find((p) => p.id === '126')!
+    expect(dv.videos.map((v) => [v.codecs, v.supplementalCodecs, v.videoRange])).toEqual([['hvc1.2.4.L153.b0', 'dvh1.08.07/db4h', 'HLG'], ['hev1.1.6.L153.90', undefined, undefined]])
+    expect(dv.videos[0].backupURLs).toEqual(['https://cn-gd.bilivideo.com/126-dvh1.08.07.m4s'])
+    expect(dv.fallback).toEqual({ peakBandwidths: [22_500_000 + 480_000], label: 'SDR' })
+    expect(result.plans.find((p) => p.id === '80')?.videos[0].codecs).toBe('avc1.640032')
+    expect(result.audios.map((a) => [a.codecs, a.name, a.isDefault])).toEqual([['mp4a.40.2', '320 kbps', true], ['ec-3', '杜比全景声', false]])
+  })
+
+  it('按客户端的编码：没有 HEVC 的标不可用，只给 H.264 和 AAC', () => {
+    const result = plan({ codecs: ['avc1', 'mp4a'] })
+    expect(Object.fromEntries(result.plans.map((p) => [p.id, p.unavailableReason ?? 'ok']))).toMatchObject({ 126: '设备不支持HEVC', 125: '设备不支持HEVC', 120: '设备不支持 HEVC', 80: 'ok' })
+    expect(result.selected).toBe('80')
+    expect(result.audios.map((a) => a.codecs)).toEqual(['mp4a.40.2'])
+  })
+
+  it('客户端声明了杜比视界和 FLAC：上限允许时默认选杜比视界，无损单独一组', () => {
+    const result = plan({ codecs: ['avc1', 'hvc1', 'dvh1', 'mp4a', 'ec-3', 'fLaC'], maxQualityRank: 2160 })
+    expect(result.selected).toBe('126')
+    expect(result.audios.map((a) => audioName({ id: 0, bandwidth: a.bandwidth, codecs: a.codecs }))).toEqual(['480 kbps', '杜比全景声', '无损音质'])
+    expect(plan({ codecs: ['avc1', 'hvc1', 'dvh1', 'mp4a'], maxQualityRank: 1080 }).selected).toBe('80')
+    // 能解 HEVC 但没说杜比视界：杜比视界档不可用，HDR 真彩可选中。
+    const hdr = plan({ codecs: ['avc1', 'hvc1', 'mp4a'] })
+    expect(hdr.plans.find((p) => p.id === '126')?.unavailableReason).toBe('设备不支持杜比视界')
+    expect(hdr.selected).toBe('125')
+  })
+
+  it('自动清晰度只用 SDR 档', () => {
+    const result = plan({ adaptive: true, maxQualityRank: 2160 })
+    expect(result.plans.map((p) => [p.id, p.videos.map((v) => v.codecs)])).toEqual([['auto', ['hev1.1.6.L153.90', 'avc1.640032']]])
   })
 })
 

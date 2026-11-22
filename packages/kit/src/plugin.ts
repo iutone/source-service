@@ -11,6 +11,7 @@ import type {
   Danmaku,
   EpisodeList,
   EpisodeRange,
+  FairPlayEndpoints,
   FavoriteFolder,
   FeedPage,
   FilterCategory,
@@ -38,6 +39,7 @@ import type {
   VideoActionState,
   WebLogin,
 } from '@iyt-source/protocol'
+import { BASE_PATH } from '@iyt-source/protocol'
 import type { ExitPool } from './exits.ts'
 import type { MediaGateway } from './media.ts'
 import type { KeyValueStore } from './store.ts'
@@ -155,8 +157,21 @@ export interface LinksModule {
   resolve(url: string, ctx: Ctx): Promise<LinkResolution | null>
 }
 
+/**
+ * FairPlay 许可转发（SERVER.md §6.4）：解密在 Apple 设备上做，服务端只按平台要求转发证书和许可请求，带上服务端持有的登录态。
+ * `ref` 是插件在 `fairPlayEndpoints(ref)` 里给的不透明串（一般编码视频 id、清晰度、平台的许可地址等，插件自己解释）。
+ */
+export interface FairPlayModule {
+  /** 证书的原始字节（DER）。 */
+  certificate(ref: string, ctx: Ctx): Promise<Uint8Array>
+  /** App 发来的 SPC 原始字节 → 平台给的 CKC 原始字节。 */
+  license(ref: string, spc: Uint8Array, ctx: Ctx): Promise<Uint8Array>
+}
+
 export interface PlaybackModule {
   resolve(request: ResolveRequest, ctx: Ctx): Promise<PlaybackMedia>
+  /** 有这个模块，manifest 的 `features.fairPlay` 就是 true，流可以带 `fairPlay`（用 `fairPlayEndpoints` 生成）。 */
+  fairPlay?: FairPlayModule
   progress?(request: ProgressRequest, ctx: Ctx): Promise<void>
   /** `subtitles[].cues` 指向 `/iyt/v1/sources/<id>/subtitles/<ref>/<key>`，由这里给出原文。 */
   cues?(ref: string, key: string, ctx: Ctx): Promise<Cue[]>
@@ -182,3 +197,12 @@ export interface SourcePlugin {
 
 /** 插件包的默认导出：按配置里的 `options` 创建一个源。 */
 export type SourceFactory = (options: Record<string, unknown>, env: { dataDir: string; log: Logger }) => SourcePlugin | Promise<SourcePlugin>
+
+/**
+ * 流的 `fairPlay` 字段：这个源的证书和许可地址（服务端的路由，App 只当普通 URL 用）。`ref` 放在路径里，上限 2048 字符；
+ * 平台的许可地址这类长串最好存进 `ctx.store`，`ref` 用短 id（优酷插件的做法）。
+ */
+export function fairPlayEndpoints(sourceId: string, ref: string): FairPlayEndpoints {
+  const base = `${BASE_PATH}/sources/${sourceId}/fairplay/${encodeURIComponent(ref)}`
+  return { certificate: `${base}/cert`, license: `${base}/license` }
+}

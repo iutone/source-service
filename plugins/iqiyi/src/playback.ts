@@ -1,10 +1,11 @@
 // 播放（照 App 的 IQiyiPlaybackService / IQiyiDash / IQiyiHLSAsset）：网页播放器的 `cache.video.iqiyi.com/dash`，
 // 按 Safari 的能力位请求（不声明 Widevine）。明文片源每档给一份内联的 HLS 媒体播放列表（分片是绝对地址的 TS），
-// 经媒体网关的 `text` / `generated` 提供；分片由 App 直接从 CDN 拉。FairPlay 档服务端还不支持（manifest 的
-// features.fairPlay 是 false），所以不声明 FairPlay 能力位，加密档给 `unavailableReason`。进度写进观看历史
-// （`l-rcd …/upload.action`）。
+// 经媒体网关的 `text` / `generated` 提供；分片由 App 直接从 CDN 拉。版权方要求加密的片源（迪士尼等）是 FairPlay
+// （`drmType 9`，fMP4 + SAMPLE-AES，`skd://<contentId>`）：播放列表经网关提供（补齐 key 标签），证书和许可经服务端
+// 转发（fairplay.ts，SERVER.md §6.4）。进度写进观看历史（`l-rcd …/upload.action`）。
 import type { Markers, PlaybackMedia, ProgressRequest, ResolveRequest, Stream } from '@iyt-source/protocol'
-import { SourceError, type Ctx } from '@iyt-source/kit'
+import { fairPlayEndpoints, rewritePlaylist, SourceError, type Ctx } from '@iyt-source/kit'
+import { fairPlayRef } from './fairplay.ts'
 import { apiError, type IQiyiSession } from './session.ts'
 import { arr, authKey, bool, idOf, int, num, parseID, parseJSON, PCW_API, PLAYER_SOURCE, query, str, text, vf } from './util.ts'
 
@@ -15,6 +16,7 @@ const PREFERRED_BID = 600
 /** 进度上报的最短间隔（网页播放器一分钟一次；App 约 15 秒发一次）。 */
 const REPORT_INTERVAL = 30_000
 const ENCRYPTED = '加密片源，暂不支持'
+const FAIRPLAY = 9
 
 /** 能力位（`k_ft<组>`，第 n 位 = 1 << (n - 1)），照 Safari 播放器：H.264 TS，可选 FairPlay，不要 Widevine（会让独播剧改发 Widevine）。 */
 export function capabilities(fairPlay: boolean): [string, string][] {
@@ -53,6 +55,11 @@ export interface Rendition {
   selected: boolean
   /** 明文：内联的 HLS 媒体播放列表。 */
   playlist?: string
+  /** FairPlay：主播放列表地址和许可地址（`drm.license_host`）。 */
+  url?: string
+  licenseHost?: string
+  /** FairPlay 的试看（非会员看会员片，`drm.preview`，约 6 分钟）。 */
+  preview?: boolean
 }
 
 export interface DashAnswer {
@@ -78,6 +85,9 @@ export function parseDash(response: any): DashAnswer {
     const rendition: Rendition = {
       bid, size: text(video.scrsz), drmType: int(video.drmType) ?? 1, selected: bool(video._selected) === true,
       playlist: m3u8?.startsWith('#EXTM3U') ? m3u8 : undefined,
+      url: text(video.url),
+      licenseHost: text(video.drm?.license_host),
+      preview: bool(video.drm?.preview) === true ? true : undefined,
     }
     // 一个清晰度可能有几种编码：留选中的，否则明文的，否则第一个。
     const index = renditions.findIndex((r) => r.bid === bid)
@@ -100,7 +110,7 @@ export function parseDash(response: any): DashAnswer {
 }
 
 export function selectedRendition(dash: DashAnswer): Rendition | undefined {
-  return dash.renditions.find((r) => r.selected) ?? dash.renditions.find((r) => r.playlist)
+  return dash.renditions.find((r) => r.selected) ?? dash.renditions.find((r) => r.playlist || (r.drmType === FAIRPLAY && r.url))
 }
 
 export function qualityLabel(bid: number): string {
@@ -152,6 +162,32 @@ export function normalizePlaylist(playlist: string): string {
   return lines.join('\n')
 }
 
+/**
+ * FairPlay 的媒体播放列表（SERVER.md §6.4）：分片、`EXT-X-MAP` 改成绝对地址（App 直连 CDN）；`skd://` 的
+ * `EXT-X-KEY` 补齐 `METHOD=SAMPLE-AES`、`KEYFORMAT="com.apple.streamingkeydelivery"`、`KEYFORMATVERSIONS="1"`。
+ * skd 地址原样保留：它的主机部分就是爱奇艺 KSM 认的 content id（App 的 FairPlayKit 默认这么取，已端到端验证）。
+ */
+export function normalizeFairPlayMedia(playlist: string, base: string): string {
+  return rewritePlaylist(playlist, base, (absolute) => absolute)
+    .split('\n')
+    .map((line) => {
+      if (!/^#EXT-X-(SESSION-)?KEY:/.test(line) || !/URI="skd:\/\//.test(line)) return line
+      const [tag, rest] = [line.slice(0, line.indexOf(':') + 1), line.slice(line.indexOf(':') + 1)]
+      const attributes = splitAttributes(rest).filter(([key]) => !['METHOD', 'KEYFORMAT', 'KEYFORMATVERSIONS'].includes(key))
+      const method = /METHOD=(SAMPLE-AES(-CTR)?)/.exec(rest)?.[1] ?? 'SAMPLE-AES'
+      const others = attributes.map(([key, value]) => `${key}=${value}`)
+      return `${tag}${[`METHOD=${method}`, ...others, 'KEYFORMAT="com.apple.streamingkeydelivery"', 'KEYFORMATVERSIONS="1"'].join(',')}`
+    })
+    .join('\n')
+}
+
+/** HLS 属性列表 `A=1,B="x,y"` → 键值对（引号里的逗号不拆）。 */
+function splitAttributes(list: string): [string, string][] {
+  const out: [string, string][] = []
+  for (const match of list.matchAll(/([A-Z0-9-]+)=("[^"]*"|[^,]*)/g)) out.push([match[1], match[2]])
+  return out
+}
+
 /** 不能播的 `dash` 回答 → 给用户看的错误。 */
 export function unavailable(dash: DashAnswer, isVIP: boolean): SourceError {
   if ((dash.status === 110 || dash.status === 502) && !isVIP) return new SourceError('restricted', '该集需要爱奇艺 VIP 会员')
@@ -161,6 +197,8 @@ export function unavailable(dash: DashAnswer, isVIP: boolean): SourceError {
 
 export class IQiyiPlayback {
   private readonly reported = new Map<string, number>()
+  /** FairPlay 的许可地址，按 ref（tvid + 清晰度）记下；没有时许可转发再问一次 `dash`。 */
+  readonly licenseHosts = new Map<string, string>()
 
   private readonly session: IQiyiSession
 
@@ -168,9 +206,10 @@ export class IQiyiPlayback {
     this.session = session
   }
 
-  private async dash(tvid: string, bid: number, signal: AbortSignal | undefined): Promise<DashAnswer> {
+  async dash(tvid: string, bid: number, signal: AbortSignal | undefined): Promise<DashAnswer> {
     const s = this.session
-    const url = dashURL({ tvid, bid, authCookie: s.authCookie, uid: s.uid, deviceID: s.deviceID, vipType: s.vipType })
+    // 声明 FairPlay（Safari 的能力位）：版权方要求加密的片源才给得出来。
+    const url = dashURL({ tvid, bid, fairPlay: true, authCookie: s.authCookie, uid: s.uid, deviceID: s.deviceID, vipType: s.vipType })
     const response = await s.fetch(url, signal)
     if (!response.ok) throw new SourceError('unavailable', `爱奇艺播放接口返回 HTTP ${response.status}`, { retryable: true })
     try {
@@ -201,10 +240,33 @@ export class IQiyiPlayback {
     const streams: Stream[] = []
     for (const rendition of dash.renditions) {
       const quality = { rank: qualityRank(rendition.bid), label: qualityLabel(rendition.bid) }
-      const description = `bid ${rendition.bid}${rendition.size ? ` ${rendition.size}` : ''} drm ${rendition.drmType}`
+      const description = `bid ${rendition.bid}${rendition.size ? ` ${rendition.size}` : ''} drm ${rendition.drmType}${rendition.preview ? ' 试看' : ''}`
       const base = { id: String(rendition.bid), format: 'hls' as const, quality, description }
       if (rendition.bid >= PREFERRED_BID && !s.isVIP) {
         streams.push({ ...base, url: 'about:blank', unavailableReason: 'VIP' })
+      } else if (rendition.drmType === FAIRPLAY) {
+        // 别的 FairPlay 清晰度也要单独请求：主播放列表在 App 第一次拉时才问 `dash`。
+        const bid = rendition.bid
+        const ref = fairPlayRef(tvid, bid)
+        let url: string
+        if (rendition.bid === selected.bid && rendition.url) {
+          if (rendition.licenseHost) this.licenseHosts.set(ref, rendition.licenseHost)
+          url = await this.fairPlayMaster(rendition.url, ctx)
+        } else {
+          let master: Promise<string> | undefined
+          url = ctx.media.generated(() => {
+            master ??= this.dash(tvid, bid, undefined).then(async (answer) => {
+              const chosen = selectedRendition(answer)
+              if (answer.status !== 101) throw unavailable(answer, s.isVIP)
+              if (chosen?.drmType !== FAIRPLAY || !chosen.url) throw new SourceError('unplayable', '这个清晰度暂时拿不到加密播放地址')
+              if (chosen.licenseHost) this.licenseHosts.set(ref, chosen.licenseHost)
+              return this.fairPlayMasterText(chosen.url, ctx)
+            })
+            master.catch(() => (master = undefined))
+            return master
+          }, { name: 'master.m3u8' })
+        }
+        streams.push({ ...base, url, fairPlay: fairPlayEndpoints(ctx.sourceId, ref), keepable: false })
       } else if (rendition.drmType !== 1) {
         streams.push({ ...base, url: 'about:blank', unavailableReason: ENCRYPTED })
       } else if (rendition.bid === selected.bid && rendition.playlist) {
@@ -228,7 +290,7 @@ export class IQiyiPlayback {
     streams.sort((l, r) => r.quality.rank - l.quality.rank || Number(r.id) - Number(l.id))
     const available = streams.filter((stream) => !stream.unavailableReason)
     if (available.length === 0) {
-      if (dash.renditions.some((r) => r.drmType !== 1) && !dash.renditions.some((r) => r.drmType === 1)) throw new SourceError('unplayable', `${ENCRYPTED}（该片只有 FairPlay 加密版本）`)
+      if (dash.renditions.every((r) => r.drmType !== 1 && r.drmType !== FAIRPLAY)) throw new SourceError('unplayable', `${ENCRYPTED}（该片只有 FairPlay 之外的加密版本）`)
       throw new SourceError('restricted', '没有可播放的清晰度')
     }
     const cap = request.preferences?.maxQualityRank ?? Number.POSITIVE_INFINITY
@@ -253,6 +315,36 @@ export class IQiyiPlayback {
       reportContext: { tvid, albumID: dash.albumID },
       diagnostics: { tvid, bid: String(selected.bid), vipType: s.vipType, loggedIn: String(s.loggedIn) },
     }
+  }
+
+  /**
+   * FairPlay 主播放列表：取下来，变体 / 音频组的媒体播放列表改成网关的 `generated` 地址（第一次请求时去取、补齐 key 标签、
+   * 分片地址改成绝对的 CDN 地址，App 直连）。取播放列表时带网页的头和登录 cookie，和 App 的 AVURLAsset 一样。
+   */
+  private async fairPlayMaster(url: string, ctx: Ctx): Promise<string> {
+    return ctx.media.text(await this.fairPlayMasterText(url, ctx), { name: 'master.m3u8' })
+  }
+
+  private async fairPlayMasterText(url: string, ctx: Ctx): Promise<string> {
+    const { text: master, url: base } = await this.playlistText(url, undefined)
+    // 平台直接给了媒体播放列表（没有变体）：补齐 key 标签就行。
+    if (!master.includes('#EXT-X-STREAM-INF')) return normalizeFairPlayMedia(master, base)
+    return rewritePlaylist(master, base, (absolute) => ctx.media.generated(
+      async () => {
+        const media = await this.playlistText(absolute, undefined)
+        return normalizeFairPlayMedia(media.text, media.url)
+      },
+      { name: absolute.split('?')[0].split('/').pop() || 'media.m3u8' },
+    ))
+  }
+
+  private async playlistText(url: string, signal: AbortSignal | undefined): Promise<{ text: string; url: string }> {
+    const response = await this.session.fetch(url, signal)
+    if (response.status === 403 || response.status === 410) throw new SourceError('unplayable', '加密播放地址已过期，请重新打开', { retryable: true })
+    if (!response.ok) throw new SourceError('unavailable', `取加密播放列表失败（HTTP ${response.status}）`, { retryable: true })
+    const body = await response.text()
+    if (!body.trimStart().startsWith('#EXTM3U')) throw new SourceError('upstream_changed', '加密播放列表读不懂')
+    return { text: body, url: response.url || url }
   }
 
   /** 剧要播的那集：历史里最新看的，否则第一集。 */
