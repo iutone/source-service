@@ -85,13 +85,19 @@ sources:
   - id: youtube
     plugin: /app/plugins/youtube                       # 镜像自带，配置里加上才启用
     options: { language: zh-CN }
+  - id: ted
+    plugin: /app/plugins/ted                           # TED 演讲（中文标题、多语字幕），国内直连
+  - id: open163
+    plugin: /app/plugins/open163                       # 网易公开课，国内直连
   # 可选：本地视频目录（要先挂载视频目录）。一级目录是频道，频道下的目录是节目
   # - id: videos
   #   plugin: "@iyt-source/folder"
   #   options: { path: /media/videos, name: 本地视频 }
 ```
 
-镜像里带示例源 `folder` 和 YouTube 插件（`/app/plugins/youtube`），默认配置一个源也不启用，在 `sources` 里加上才有。
+镜像里带示例源 `folder` 和三个插件：YouTube（`/app/plugins/youtube`）、TED（`/app/plugins/ted`）、网易公开课（`/app/plugins/open163`），
+默认配置一个源也不启用，在 `sources` 里加上才有。TED 和网易公开课国内能直连：服务设了全局代理时，把它们加进 `NO_PROXY`
+（`.ted.com,.tedcdn.com,.163.com,.126.net,.netease.com`），免得代理节点不放行。
 其他平台的源是单独的插件，可以放进数据目录、在配置里写路径加载，或 `iyt-source plugins add` 装进 `/data/plugins`。
 
 ### 检查

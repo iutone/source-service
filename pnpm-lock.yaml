@@ -274,6 +274,24 @@ importers:
 
   packages/protocol: {}
 
+  plugins/open163:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
+  plugins/ted:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
   plugins/youtube:
     dependencies:
       '@iyt-source/kit':
