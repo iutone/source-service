@@ -1,0 +1,9 @@
+{
+ "guid": "0123456789abcdef",
+ "cid": "mzc00200803dr6b",
+ "vid": "c4102g9a01t",
+ "salt": "iqbQcbYJxf1suXsyvwKDLK4y",
+ "flowid": "d6ad8748e24fde25154f8cdfb9a003c1",
+ "cipher": "cKDd'l BK|EvKB8K|VvKBJB8K|VvK$dK|cKth'K|(vK$gK|LcKgDK|EOWVVOvKh3-.}m}op}`}\"-K}mE`}B@}md`}gF$-.}m}标清wZRYEhx}`}@&}m{X`}H&^uq\".}mR`?'GC?T%(?y:RE?TAA(?lc'E1?TzA(?wb'c1?TA(?`X?TAOzkkIkkI(?XbREG?T%(ng(X5K~cgniKrnace%~nin标清nrnX~aus_bkucninExK-nrnX~ju%%~c(niKrnQ8FTH~`_;HCoOG#yG9YH~SS`8$`;Ho>GyUCoOG#yG9YH~Svaaa;HkUxno9G0kOH~HYG/}/:,ngp/!(}/+q`:Mpq/!rR}/:,ngpN,\"/!r}/:,ngpNpq`gYJN*YQq/!(}/:,nkDvWMFTq_F0DQP}F",
+ "plain": "{\"dltype\":3,\"em\":0,\"exem\":0,\"fl\":{\"cnt\":4,\"fi\":[{\"id\":321002,\"name\":\"hd\",\"lmt\":0,\"sb\":1,\"cname\":\"标清;(480P)\",\"br\":59,\"profile\":4,\"drm\":0,\"type\":11,\"video\":21,\"audio\":1,\"fs\":172995995,\"super\":0,\"hdr10enh\":0,\"sname\":\"标清\",\"resolution\":\"480P\",\"recommend\":0,\"vfps\":25,\"bandwidth\":442692,\"audiobandwidth\":48000,\"formatdefn\":\"hd\",\"tvmsr\":0,\"feature\":16,\"tvmsr_v2\":1,\"tvmsr_reason_code\":0,\"tvmsrlmt\":0,\"group\""
+}

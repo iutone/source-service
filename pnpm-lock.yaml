@@ -274,6 +274,33 @@ importers:
 
   packages/protocol: {}
 
+  plugins/bilibili:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
+  plugins/iqiyi:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
+  plugins/mgtv:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
   plugins/open163:
     dependencies:
       '@iyt-source/kit':
@@ -284,6 +311,24 @@ importers:
         version: link:../../packages/protocol
 
   plugins/ted:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
+  plugins/tencent:
+    dependencies:
+      '@iyt-source/kit':
+        specifier: workspace:*
+        version: link:../../packages/kit
+      '@iyt-source/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+
+  plugins/youku:
     dependencies:
       '@iyt-source/kit':
         specifier: workspace:*

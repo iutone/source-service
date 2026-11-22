@@ -91,13 +91,16 @@ sources:
   - id: open163
     plugin: /app/plugins/open163                       # 网易公开课，国内直连；没写 visibility：App 里可添加
     # visibility: hidden                               # 暂时不给 App 看
+  # 国内平台（要扫码登录，App 里可添加）：youku / bilibili / tencent / iqiyi / mgtv
+  - id: bilibili
+    plugin: /app/plugins/bilibili
   # 可选：本地视频目录（要先挂载视频目录）。一级目录是频道，频道下的目录是节目
   # - id: videos
   #   plugin: "@iyt-source/folder"
   #   options: { path: /media/videos, name: 本地视频 }
 ```
 
-镜像里带示例源 `folder` 和三个插件：YouTube（`/app/plugins/youtube`）、TED（`/app/plugins/ted`）、网易公开课（`/app/plugins/open163`），
+镜像里带示例源 `folder` 和这些插件：优酷、哔哩哔哩、腾讯视频、爱奇艺、芒果TV（`/app/plugins/<id>`，要扫码登录），YouTube（`/app/plugins/youtube`）、TED（`/app/plugins/ted`）、网易公开课（`/app/plugins/open163`），
 默认配置一个源也不启用，在 `sources` 里加上才有。
 
 每个源的 `visibility` 决定它在 App 里怎么出现：`auto` 直接列进 App 的切换站点；`discoverable`（默认）列在 App 的

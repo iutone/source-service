@@ -1,0 +1,16 @@
+{
+  "name": "iyt-source-mgtv",
+  "private": true,
+  "version": "0.1.0",
+  "description": "IUTone 自建源：芒果TV（照 App 的 Core 实现移植，登录后才能用）。随镜像发布（/app/plugins/mgtv），不在默认配置里：在 config.yaml 的 sources 里按路径加上才启用。",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p ../../tsconfig.json"
+  },
+  "dependencies": {
+    "@iyt-source/kit": "workspace:*",
+    "@iyt-source/protocol": "workspace:*"
+  }
+}
