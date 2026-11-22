@@ -281,6 +281,7 @@ describe('播放', () => {
     expect(videoFormat('dvh1.08.07', 126, '25')).toEqual({ codecs: 'hvc1.2.4.L153.b0', supplementalCodecs: 'dvh1.08.07/db4h', videoRange: 'HLG', frameRate: 25 })
     expect(videoFormat('dvh1.08.06', 126)).toMatchObject({ codecs: 'hvc1.2.4.L150', supplementalCodecs: 'dvh1.08.06/db1p', videoRange: 'PQ' })
     expect(videoFormat('dvh1.05.06', 126)).toMatchObject({ codecs: 'dvh1.05.06', supplementalCodecs: undefined, videoRange: 'PQ' })
+    expect(videoFormat('hvc1.2.4.H150.90', 126, '25')).toMatchObject({ codecs: 'hvc1.2.4.H150.90', supplementalCodecs: undefined, videoRange: 'HLG' })
     expect(videoFormat('avc1.640032', 80, '29.97')).toMatchObject({ videoRange: 'SDR', frameRate: 29.97 })
   })
 

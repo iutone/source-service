@@ -120,6 +120,10 @@ export function videoFormat(codecs: string, qn: number, frameRate?: string): { c
     range = 'PQ'
   } else if (codecs.startsWith('dvh1.05')) {
     range = 'PQ'
+  } else if (qn === DOLBY_VISION_QN) {
+    // 杜比视界档却只写了 HEVC 编码（`hvc1.2.4.H150.90` 这类，例如 BV1NGZtBwELa）：实际是 HLG（ffprobe 读出 arib-std-b67），
+    // 不写就被当成 SDR，HDR 屏幕上发灰。
+    range = 'HLG'
   }
   return { codecs: declared, supplementalCodecs: supplemental, videoRange: range, frameRate: Math.min(rate, 60) }
 }
