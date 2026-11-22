@@ -266,7 +266,8 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   }
 
   async function manifest(request: FastifyRequest): Promise<Manifest> {
-    const version = await ytdlp.version()
+    // 不等 yt-dlp：慢的机器上 `yt-dlp --version` 要十几秒，App 读 manifest 的超时只有 5 秒。
+    const version = ytdlp.peekVersion()
     return {
       protocol: PROTOCOL_VERSION,
       server: {
