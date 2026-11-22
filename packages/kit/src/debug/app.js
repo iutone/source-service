@@ -937,9 +937,9 @@ const LogView = {
         <td>{{ e.limited }}</td><td>{{ e.lastFailureAt ? new Date(e.lastFailureAt).toLocaleTimeString() + ' ' + e.lastFailure : '' }}</td>
         <td class="muted">{{ e.lastSuccessAt ? new Date(e.lastSuccessAt).toLocaleTimeString() : '' }}</td></tr></table></template>
     <h1 class="page-title">请求日志</h1><p class="muted">最近 300 条，每 3 秒刷新（调试页自己的请求不记）</p>
-    <table><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>耗时</th><th>错误</th><th>对端</th></tr>
+    <table><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>耗时</th><th>错误</th><th>对端</th><th>Host</th></tr>
       <tr v-for="(r, i) in records" :key="i"><td>{{ new Date(r.at).toLocaleTimeString() }}</td><td>{{ r.method }}</td><td class="mono" style="word-break:break-all">{{ r.path }}</td>
-        <td :class="{ error: r.status >= 400 }">{{ r.status }}</td><td>{{ r.ms }} ms</td><td>{{ r.errorCode ? r.errorCode + '：' + r.errorMessage : '' }}</td><td class="muted">{{ r.peer }}</td></tr></table></div>`,
+        <td :class="{ error: r.status >= 400 }">{{ r.status }}</td><td>{{ r.ms }} ms</td><td>{{ r.errorCode ? r.errorCode + '：' + r.errorMessage : '' }}</td><td class="muted">{{ r.peer }}</td><td class="muted mono">{{ r.host }}</td></tr></table></div>`,
   data: () => ({ records: [], exits: {} }),
   computed: {
     exitRows() {

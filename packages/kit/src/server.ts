@@ -143,6 +143,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
       errorCode: failure?.code,
       errorMessage: failure?.message,
       peer: request.socket.remoteAddress,
+      host: request.headers.host,
     })
   })
 

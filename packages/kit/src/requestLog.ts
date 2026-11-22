@@ -8,6 +8,8 @@ export interface RequestRecord {
   errorCode?: string
   errorMessage?: string
   peer?: string
+  /** 请求的 Host 头：App 用的是 IP 还是主机名。 */
+  host?: string
 }
 
 export class RequestLog {

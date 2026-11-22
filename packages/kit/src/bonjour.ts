@@ -1,3 +1,4 @@
+import { hostname } from 'node:os'
 import { Bonjour, type Service } from 'bonjour-service'
 import { BASE_PATH, BONJOUR_TYPE, PROTOCOL_VERSION } from '@iyt-source/protocol'
 
@@ -22,6 +23,9 @@ export function advertise(options: { name: string; port: number; serverId: strin
       type: BONJOUR_TYPE,
       protocol: 'tcp',
       port: options.port,
+      // SRV 的目标和 A / AAAA 记录的名字：bonjour-service 默认用 os.hostname()（「mxc-nas」「Mac」，不带 .local），
+      // 这种名字 mDNS 解析不了，只能靠路由器的 DNS；设备 DNS 不是路由器时就拿不到地址。补上 .local。
+      host: localHostName(),
       txt: { v: String(PROTOCOL_VERSION), id: options.serverId, path: BASE_PATH },
     })
     service.on?.('error', (error: Error) => {
@@ -62,4 +66,10 @@ export function advertise(options: { name: string; port: number; serverId: strin
       await teardown()
     },
   }
+}
+
+/** 本机的 mDNS 主机名：`<hostname>.local`（已有 .local 的不重复加）。 */
+export function localHostName(name = hostname()): string {
+  const base = name.replace(/\.$/, '').replace(/\.local$/i, '')
+  return `${base}.local`
 }
