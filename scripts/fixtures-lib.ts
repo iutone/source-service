@@ -78,7 +78,7 @@ export async function buildFixtures(): Promise<{ index: FixtureCase[]; bodies: M
     dataDir: data,
     version: '0.0.0-fixture',
     sources: [{ id: 'sample', plugin: createSampleSource() }],
-    ytdlp: { version: async () => '2026.11.10' } as never,
+    ytdlp: { version: async () => '2026.11.10', peekVersion: () => '2026.11.10' } as never,
   })
   const index: FixtureCase[] = []
   const bodies = new Map<string, unknown>()
