@@ -82,6 +82,25 @@ export function videoLadder(formats: YtDlpFormat[]): YtDlpFormat[] {
   return [...best.values()].sort((a, b) => (b.height ?? 0) - (a.height ?? 0))
 }
 
+/** 视频原本的语言：yt-dlp 的 `language`，否则原声音轨（language_preference 最高）的语言。 */
+function originalLanguage(info: YtDlpInfo): string | undefined {
+  if (info.language) return info.language
+  const audio = info.formats.filter((f) => f.language && f.vcodec === 'none')
+    .sort((a, b) => (b.language_preference ?? -1) - (a.language_preference ?? -1))[0]
+  return audio?.language
+}
+
+/**
+ * 字幕里视频原本语言的排前面（不知道就英语），各自原有顺序不变：App 选翻译原文时取第一条语音识别和同语言的上传字幕
+ * （`PlaybackSubtitleTrack.preferred`），否则上传字幕按语言代码排，阿拉伯语（ar）会排第一。和内置 YouTube 的
+ * `YTDashPlaylist.spokenFirst` 一样。
+ */
+export function spokenFirst<T extends { protocol: { language: string } }>(tracks: T[], original: string | undefined): T[] {
+  const base = (code: string) => code.split(/[-_]/)[0].toLowerCase()
+  const wanted = base(original ?? 'en')
+  return [...tracks.filter((t) => base(t.protocol.language) === wanted), ...tracks.filter((t) => base(t.protocol.language) !== wanted)]
+}
+
 /** 每种语言一条最好的 AAC 音频；原声（language_preference 最高）在前。 */
 export function audioTracks(formats: YtDlpFormat[]): YtDlpFormat[] {
   const best = new Map<string, YtDlpFormat>()
@@ -277,7 +296,7 @@ export class YouTubePlayback {
       const language = key.slice(0, -'-orig'.length)
       add(`${language}.asr`, language, captions, true)
     }
-    return tracks
+    return spokenFirst(tracks, originalLanguage(info))
   }
 
   async cues(video: string, key: string, ctx: Ctx): Promise<Cue[]> {
