@@ -13,7 +13,7 @@ import type {
   VideoItem,
 } from '@iyt-source/protocol'
 import { BASE_PATH } from '@iyt-source/protocol'
-import { badRequest, notFound, SourceError, type Ctx, type SourceFactory, type SourcePlugin } from '@iyt-source/kit'
+import { badRequest, codecName, codecSupported, notFound, SourceError, type Ctx, type SourceFactory, type SourcePlugin } from '@iyt-source/kit'
 import { decodeID, encodeID, inside, type Library, type Show, ROOT_CHANNEL, scan, type VideoFile } from './library.ts'
 import { parseSubtitles, toWebVTT } from './subtitles.ts'
 
@@ -355,6 +355,9 @@ export function createFolderSource(config: FolderOptions): SourcePlugin {
         const owner = library.showOf.get(file.rel)
         if (!file.playable) throw new SourceError('unplayable', '这个格式暂不支持播放（需要转封装）')
         const info = await probe(file.path)
+        // 客户端说解不了这个视频编码（没有 HEVC 解码器的盒子）：流标为不可用，App 显示原因（ResolveRequest.preferences.codecs）。
+        const codecs = request.preferences?.codecs
+        const unsupported = info?.codec && !codecSupported(codecs, info.codec) ? `这台设备不能解码 ${codecName(info.codec)} 视频` : undefined
         const p = progressOf(ctx)[file.rel]
         const watched = fraction(p) ?? 0
         const height = info?.height ?? 0
@@ -380,7 +383,8 @@ export function createFolderSource(config: FolderOptions): SourcePlugin {
               url: ctx.media.file(file.path, { ttl: 12 * 3600 }),
               format: 'mp4',
               quality: { rank: height, label: height ? `${height}P` : '原画' },
-              description: [info?.codec, height ? `${height}p` : undefined, 'local file'].filter(Boolean).join(' '),
+              description: [info?.codec, info?.audioCodec, height ? `${height}p` : undefined, 'local file'].filter(Boolean).join(' '),
+              unavailableReason: unsupported,
             },
           ],
           selectedStream: 'file',
@@ -420,22 +424,30 @@ function languageName(code: string): string {
 interface Probe {
   height?: number
   codec?: string
+  audioCodec?: string
   duration?: number
 }
 
-/** ffprobe 读分辨率、编码；没装 ffprobe 就算了。 */
+/** ffprobe 读分辨率、视频 / 音频编码；没装 ffprobe 就算了。 */
 function runProbe(path: string): Promise<Probe | undefined> {
   return new Promise((resolve) => {
     execFile(
       process.env.FFPROBE_PATH || 'ffprobe',
-      ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=height,codec_name:format=duration', '-of', 'json', path],
+      ['-v', 'error', '-show_entries', 'stream=codec_type,height,codec_name:format=duration', '-of', 'json', path],
       { timeout: 5000 },
       (error, stdout) => {
         if (error) return resolve(undefined)
         try {
-          const data = JSON.parse(stdout) as { streams?: { height?: number; codec_name?: string }[]; format?: { duration?: string } }
-          const stream = data.streams?.[0]
-          resolve({ height: stream?.height, codec: stream?.codec_name, duration: data.format?.duration ? Number(data.format.duration) : undefined })
+          type ProbeStream = { codec_type?: string; height?: number; codec_name?: string }
+          const data = JSON.parse(stdout) as { streams?: ProbeStream[]; format?: { duration?: string } }
+          const video = data.streams?.find((s) => s.codec_type === 'video')
+          const audio = data.streams?.find((s) => s.codec_type === 'audio')
+          resolve({
+            height: video?.height,
+            codec: video?.codec_name,
+            audioCodec: audio?.codec_name,
+            duration: data.format?.duration ? Number(data.format.duration) : undefined,
+          })
         } catch {
           resolve(undefined)
         }
