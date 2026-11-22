@@ -97,7 +97,27 @@ export function trialRestriction(ups: J): string | undefined {
   if (!time || time <= 0) return undefined
   const duration = num(ups?.video?.seconds)
   if (duration && duration > 0 && time >= duration - 5) return undefined
-  return ups.trial.type === 'subscribe' ? restriction(-2004) : restriction(-3001)
+  if (ups.trial.type === 'subscribe') return restriction(-2004)
+  // 会员也只给试看：单点付费（`fee.paid_type` 有 vod）或频道包月（mon）的片子，VIP 不包含（实测《庆余年2》疑点揭秘这类付费解读）。
+  if (isVip(ups)) {
+    const types = arr(ups?.fee?.paid_type).map((t: J) => text(t))
+    const price = text(ups?.pay?.price)
+    if (types.includes('vod') || types.includes('mon')) {
+      return `这个视频要在优酷单独购买${price ? `（¥${price}）` : ''}${types.includes('mon') ? '或开通它的包月' : ''}，优酷 VIP 不包含`
+    }
+    return '这个视频优酷 VIP 也只能试看（可能要更高等级的会员或单独购买）'
+  }
+  return restriction(-3001)
+}
+
+/** UPS 认出的账号是不是会员：`user.vip`，或 `controller.pay_info_ext`（JSON 字符串）的 `is_vip`。 */
+export function isVip(ups: J): boolean {
+  if (bool(ups?.user?.vip) === true) return true
+  try {
+    return bool(JSON.parse(text(ups?.controller?.pay_info_ext) ?? '{}')?.is_vip) === true
+  } catch {
+    return false
+  }
 }
 
 /** 按优酷的清晰度档位（KuPlayer 的标签）定档，认不出用画面高度。 */

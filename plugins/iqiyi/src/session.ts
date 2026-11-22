@@ -311,7 +311,8 @@ export function membership(vip: any): Membership | undefined {
   const active = str(vip?.status) === '1'
   if (!active && !end) return undefined
   return {
-    tier: text(vip?.name) ?? text(vip?.vipTypeName) ?? '会员',
+    // `name` 有时是用户昵称（实测 2026-11：过期会员返回的就是昵称），像会员名的才用它。
+    tier: text(vip?.vipTypeName) ?? (/会员|VIP|vip|星钻|钻石|黄金|白金/.test(text(vip?.name) ?? '') ? text(vip?.name) : undefined) ?? '会员',
     active: active && (!end || end.getTime() > Date.now()),
     endsAt: end?.toISOString(),
   }

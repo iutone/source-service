@@ -246,6 +246,10 @@ describe('playback', () => {
     try { checkUPS({ error: { code: -4008 } }) } catch (e) { expect((e as UPSError).code).toBe('unplayable') }
     expect(trialRestriction({ trial: { time: 360, type: 'time' }, video: { seconds: 2700 } })).toContain('VIP')
     expect(trialRestriction({ trial: { time: 2698 }, video: { seconds: 2700 } })).toBeUndefined()
+    // 会员看单点付费的片子：说要单独购买，而不是要 VIP（NAS 上 VIP 账号的实测回答）。
+    const paid = { trial: { time: 60, type: 'time' }, video: { seconds: 440.9 }, user: { vip: true }, fee: { paid_type: ['vod', 'mon'] }, pay: { price: '1', can_play: false } }
+    expect(trialRestriction(paid)).toBe('这个视频要在优酷单独购买（¥1）或开通它的包月，优酷 VIP 不包含')
+    expect(trialRestriction({ ...paid, user: undefined, controller: { pay_info_ext: '{"is_vip":true}' }, fee: {} })).toContain('VIP 也只能试看')
   })
 
   it('reads expiry from the raw query', () => {

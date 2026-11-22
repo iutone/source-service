@@ -9,7 +9,7 @@ import { YoukuDetail } from './detail.ts'
 import { FALLBACK_CHANNELS, FILTER_CATEGORIES, HOME_CHANNEL, PINNED_CHANNELS, YoukuFeed, YoukuFilter, channelFilterCategories } from './feed.ts'
 import { YoukuHistory, fetchDanmaku } from './history.ts'
 import { LINK_PATTERNS, resolveLink } from './links.ts'
-import { UPSError, callUPS, checkUPS, languages, mediaFrom, pickStreams, reportProgress, upsParameters, type RawStream } from './playback.ts'
+import { UPSError, callUPS, checkUPS, isVip, languages, mediaFrom, pickStreams, reportProgress, upsParameters, type RawStream } from './playback.ts'
 import { PrivateKeySession, PrivatePipeline, privateEngineAvailable } from './private.ts'
 import { YoukuSearch } from './search.ts'
 import { LOGIN_COOKIES, WEB_LOGIN_URL, YoukuSession, publicProfile, sleep } from './session.ts'
@@ -340,6 +340,8 @@ export function createYoukuSource(options: YoukuOptions = {}, env?: { dataDir: s
           paths: Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(','),
           ckeyAge: String(Math.round((session.ckeyAge ?? 0) / 1000)),
           loggedIn: String(session.loggedIn),
+          // UPS 认出的会员身份：登录了却是 false 就是 cookie 没带对。
+          vip: String(isVip(data)),
         }, raw.map((s) => s.url))
       },
       async progress(request, ctx) {
