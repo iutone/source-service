@@ -14,6 +14,7 @@ import {
   type LinkResolveRequest,
   type ResolveRequest,
   type SourceManifest,
+  type SourceVisibility,
   type Target,
 } from '@iyt-source/protocol'
 import { badRequest, notFound, SourceError, toSourceError } from './errors.ts'
@@ -30,7 +31,8 @@ import { registerDebug } from './debug.ts'
 export interface ServerOptions {
   name: string
   dataDir: string
-  sources: { id: string; plugin: SourcePlugin }[]
+  /** `visibility` 省略为 `discoverable`（SERVER.md §3.4）。 */
+  sources: { id: string; plugin: SourcePlugin; visibility?: SourceVisibility }[]
   version?: string
   allowedHosts?: string[]
   ytdlp?: YtDlp
@@ -40,6 +42,8 @@ export interface ServerOptions {
   localNetworkOnly?: boolean
   /** 调试页 `/debug`；默认开。 */
   debug?: boolean
+  /** 调试页改了源的展示策略：保存下来（CLI 写回配置文件）。不给就只改内存，重启后恢复。 */
+  saveVisibility?: (id: string, visibility: SourceVisibility) => void | Promise<void>
   logger?: boolean
 }
 
@@ -91,13 +95,14 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     for (const method of [route.method].flat()) routes.push(`${method} ${route.url}`)
   })
 
-  const sources = new Map<string, { plugin: SourcePlugin; store: KeyValueStore; log: Logger }>()
-  for (const { id, plugin } of options.sources) {
+  const sources = new Map<string, { plugin: SourcePlugin; visibility: SourceVisibility; store: KeyValueStore; log: Logger }>()
+  for (const { id, plugin, visibility } of options.sources) {
     if (!SOURCE_ID.test(id)) throw new Error(`源 id 只能是 [a-z0-9-]{1,24}：${id}`)
     if (sources.has(id)) throw new Error(`重复的源 id：${id}`)
     const child = app.log.child({ source: id })
     sources.set(id, {
       plugin,
+      visibility: visibility ?? 'discoverable',
       store: new KeyValueStore(join(options.dataDir, 'sources', id)),
       log: {
         info: (message, fields) => child.info(fields ?? {}, message),
@@ -250,6 +255,7 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
     return {
       id,
       name: plugin.info.name,
+      visibility: entry.visibility,
       brand,
       status: plugin.info.status?.() ?? { state: 'ready' },
       account,
@@ -269,7 +275,10 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
         software: 'iyt-source-server',
         components: version ? { 'yt-dlp': version } : undefined,
       },
-      sources: await Promise.all([...sources.keys()].map((id) => sourceManifest(id, { id, ...sources.get(id)! }, request))),
+      // 隐藏的源不列出（调试页用 `?all=1` 看全部）；它的接口照常可用。
+      sources: await Promise.all([...sources.keys()]
+        .filter((id) => sources.get(id)!.visibility !== 'hidden' || (request.query as { all?: string }).all === '1')
+        .map((id) => sourceManifest(id, { id, ...sources.get(id)! }, request))),
     }
   }
 
@@ -585,7 +594,18 @@ export async function createServer(options: ServerOptions): Promise<SourceServer
   app.get(`${P}/media/:token/*`, mediaRoute)
   app.head(`${P}/media/:token/*`, mediaRoute)
 
-  if (options.debug !== false) registerDebug(app, { requestLog, exits })
+  if (options.debug !== false) {
+    registerDebug(app, {
+      requestLog,
+      exits,
+      async setVisibility(id, visibility) {
+        const entry = sources.get(id)
+        if (!entry) throw notFound('这个源')
+        await options.saveVisibility?.(id, visibility)
+        entry.visibility = visibility
+      },
+    })
+  }
 
   return {
     app,

@@ -1911,11 +1911,16 @@
             "state"
           ],
           "type": "object"
+        },
+        "visibility": {
+          "$ref": "#/definitions/SourceVisibility",
+          "description": "默认 `discoverable`。"
         }
       },
       "required": [
         "id",
         "name",
+        "visibility",
         "brand",
         "status",
         "account",
@@ -1929,6 +1934,15 @@
         "starting",
         "degraded",
         "broken"
+      ],
+      "type": "string"
+    },
+    "SourceVisibility": {
+      "description": "源在 App 里怎么出现（§3.4，服务端配置决定）：\n- `auto`：直接列进 App 的源（切换站点里就有）。\n- `discoverable`：App 发现了这个服务时，列在「可添加的源」里，用户加上才进切换站点（默认）。\n- `hidden`：不出现在 manifest 里（只有调试页 `manifest?all=1` 看得到）。 旧服务没有这个字段：App 当 `auto`。",
+      "enum": [
+        "auto",
+        "discoverable",
+        "hidden"
       ],
       "type": "string"
     },

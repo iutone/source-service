@@ -135,7 +135,7 @@ export function createTEDSource(options: TEDOptions = {}): SourcePlugin {
       return rows.map(({ index, ribbon, videos }): FeedSection => ({
         id: `ribbon-${index}`,
         title: RIBBON_NAMES[ribbon.name] ?? ribbon.name,
-        style: 'row',
+        style: 'grid',
         items: videos.map((v) => videoItem(localized.get(v.id) ?? v)),
       }))
     }).catch((error): FeedSection[] => {

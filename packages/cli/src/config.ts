@@ -1,11 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { parse, stringify } from 'yaml'
+import { isMap, isSeq, parse, parseDocument, stringify } from 'yaml'
+import type { SourceVisibility } from '@iyt-source/protocol'
+
+const VISIBILITIES: SourceVisibility[] = ['auto', 'discoverable', 'hidden']
 
 export interface SourceConfig {
   id: string
   plugin: string
+  /** 在 App 里怎么出现：auto 直接列出 / discoverable 可添加（默认）/ hidden 不列出（SERVER.md §3.4）。 */
+  visibility?: SourceVisibility
   options?: Record<string, unknown>
 }
 
@@ -61,7 +66,10 @@ export function loadConfig(path?: string): { config: Config; path: string; creat
       if (!source?.id || !source?.plugin) throw new Error(`${file}：每个源都要有 id 和 plugin`)
       // 以 ./ ../ 开头的 plugin 是本地目录（相对配置文件）。
       const plugin = source.plugin.startsWith('./') || source.plugin.startsWith('../') ? resolve(base, source.plugin) : source.plugin
-      return { id: source.id, plugin, options: resolvePaths(source.options ?? {}, base) }
+      if (source.visibility !== undefined && !VISIBILITIES.includes(source.visibility)) {
+        throw new Error(`${file}：源 ${source.id} 的 visibility 只能是 ${VISIBILITIES.join(' / ')}`)
+      }
+      return { id: source.id, plugin, visibility: source.visibility, options: resolvePaths(source.options ?? {}, base) }
     }),
     dataDir: dataDir ?? (raw.dataDir ? resolve(base, raw.dataDir) : base),
   }
@@ -75,4 +83,19 @@ function resolvePaths(options: Record<string, unknown>, base: string): Record<st
     out[key] = typeof value === 'string' && (value.startsWith('./') || value.startsWith('../')) && !isAbsolute(value) ? resolve(base, value) : value
   }
   return out
+}
+
+/**
+ * 把一个源的展示策略写回配置文件（调试页改的，SERVER.md §3.2）。用 yaml 的文档模型改，注释和格式保留；
+ * 默认值 `discoverable` 不写，删掉这一项。
+ */
+export function saveVisibility(file: string, id: string, visibility: SourceVisibility): void {
+  const document = parseDocument(readFileSync(file, 'utf8'))
+  const sources = document.get('sources')
+  if (!isSeq(sources)) throw new Error(`${file} 里没有 sources`)
+  const entry = sources.items.find((item) => isMap(item) && item.get('id') === id)
+  if (!isMap(entry)) throw new Error(`${file} 里没有源 ${id}`)
+  if (visibility === 'discoverable') entry.delete('visibility')
+  else entry.set('visibility', visibility)
+  writeFileSync(file, document.toString())
 }

@@ -94,7 +94,8 @@ const attempt = (run) => Promise.resolve().then(run).catch(toast)
 
 async function loadManifest() {
   try {
-    store.manifest = await api(`${BASE}/manifest`, { quiet: true })
+    // 调试页看全部源，隐藏的也列出（App 看到的 manifest 没有它们）。
+    store.manifest = await api(`${BASE}/manifest?all=1`, { quiet: true })
     store.manifestError = null
   } catch (error) {
     store.manifestError = error
@@ -833,37 +834,79 @@ const YouView = {
 // MARK: 调试：服务、接口、请求日志
 
 const ServerView = {
-  template: `<div v-if="store.manifest">
-    <h1 class="page-title">{{ store.manifest.server.name }}</h1>
-    <p class="muted">协议 v{{ store.manifest.protocol }} · {{ store.manifest.server.software }} {{ store.manifest.server.version }}
-      <template v-for="(v, k) in store.manifest.server.components || {}" :key="k"> · {{ k }} {{ v }}</template> · <span class="mono">{{ store.manifest.server.id }}</span></p>
-    <div class="sources">
-      <div v-for="s in store.manifest.sources" :key="s.id" class="source-card">
-        <div class="name"><img v-if="s.brand.logo" :src="s.brand.logo" alt="">{{ s.name }}<span class="dot" :class="s.status.state" :title="s.status.state"></span>
-          <img v-if="s.brand.tabIcon" :src="s.brand.tabIcon" alt="" title="首页标签图标" style="height:21px;width:auto;margin-left:auto;border-radius:0;background:#8884"></div>
-        <div class="muted mono">id: {{ s.id }}<span v-if="s.brand.tint"> · tint {{ s.brand.tint }}</span></div>
-        <div v-if="s.status.message" class="muted">{{ s.status.message }}</div>
-        <div>{{ capabilities(s) }}</div>
-        <div v-if="!s.account.login.length" class="muted">无需登录</div>
-        <div v-else-if="s.account.loggedIn" class="row" style="margin:0">已登录：{{ s.account.profile?.name }}<button class="pill sm" @click="logout(s)">退出</button></div>
-        <div v-else class="row" style="margin:0"><span class="muted">未登录（{{ { nothing: '可选', play: '播放需要', browse: '必须' }[s.account.requiredFor] }}）</span>
-          <button v-for="m in s.account.login" :key="m" class="pill sm" @click="startLogin(s, m)">{{ methodName(m) }}</button></div>
-        <div class="row" style="margin:0"><button class="pill sm" @click="selectSource(s.id)">打开</button></div>
+  template: `<div v-if="store.manifest" class="server-page">
+    <section class="server-head">
+      <div class="server-icon"><Ic n="server"/></div>
+      <div style="min-width:0;flex:1">
+        <h1>{{ store.manifest.server.name }}</h1>
+        <div class="muted">协议 v{{ store.manifest.protocol }} · {{ store.manifest.server.software }} {{ store.manifest.server.version }}
+          <template v-for="(v, k) in store.manifest.server.components || {}" :key="k"> · {{ k }} {{ v }}</template></div>
+        <div class="muted mono" style="font-size:12px">{{ store.manifest.server.id }}</div>
       </div>
+      <div class="counts">
+        <div v-for="(meta, key) in VISIBILITY" :key="key" class="count" :class="key"><b>{{ count(key) }}</b><span>{{ meta[0] }}</span></div>
+      </div>
+    </section>
+
+    <p class="muted hint">每个源右上角选它在 App 里怎么出现（鼠标停在上面看说明），改了马上生效并写回配置。</p>
+
+    <div class="sources">
+      <article v-for="s in store.manifest.sources" :key="s.id" class="source-card" :class="{ dim: s.visibility === 'hidden' }">
+        <header>
+          <img v-if="s.brand.logo" class="logo" :src="s.brand.logo" alt=""><span v-else class="logo"><Ic n="video"/></span>
+          <div style="min-width:0;flex:1">
+            <div class="name">{{ s.name }}</div>
+            <div class="muted state"><span class="dot" :class="s.status.state"></span>{{ STATE[s.status.state] ?? s.status.state }}<template v-if="s.status.message"> · {{ s.status.message }}</template>
+              <span class="mono"> · {{ s.id }}</span></div>
+          </div>
+          <select class="visibility" :class="s.visibility" :value="s.visibility ?? 'auto'" :disabled="saving === s.id"
+            :title="VISIBILITY[s.visibility ?? 'auto'][1]" @change="setVisibility(s, $event.target.value)">
+            <option v-for="(meta, key) in VISIBILITY" :key="key" :value="key">{{ meta[0] }}</option>
+          </select>
+        </header>
+
+        <div class="prop">
+          <label>账号</label>
+          <div v-if="!s.account.login.length" class="muted">不用登录</div>
+          <div v-else-if="s.account.loggedIn" class="row" style="margin:0"><Avatar :url="s.account.profile?.avatarURL" :name="s.account.profile?.name" style="width:24px;height:24px;font-size:11px"/>
+            {{ s.account.profile?.name }}<span class="muted">全家共用</span><button class="pill sm" style="margin-left:auto" @click="logout(s)">退出</button></div>
+          <div v-else class="row" style="margin:0"><span class="muted">未登录（{{ { nothing: '可选', play: '播放需要', browse: '必须' }[s.account.requiredFor] }}）</span>
+            <button v-for="m in s.account.login" :key="m" class="pill sm" @click="startLogin(s, m)">{{ methodName(m) }}</button></div>
+        </div>
+
+        <div class="prop">
+          <label>功能</label>
+          <div class="tags-row"><span v-for="c in capabilities(s)" :key="c" class="tag">{{ c }}</span></div>
+        </div>
+
+        <footer><button class="pill sm dark" @click="selectSource(s.id)">浏览这个源</button></footer>
+      </article>
     </div>
     <Empty v-if="!store.manifest.sources.length" icon="server" text="配置里没有源：在数据目录的 config.yaml 的 sources 里加上，再重启服务"/>
-    <details class="panel"><summary>manifest</summary><pre>{{ JSON.stringify(store.manifest, null, 2) }}</pre></details>
+    <details class="panel"><summary>manifest（含隐藏的源）</summary><pre>{{ JSON.stringify(store.manifest, null, 2) }}</pre></details>
   </div>`,
   setup() {
+    const saving = ref(null)
     const capabilities = (s) => {
       const f = s.features
       return [f.feed.channelBrowser ? '频道' : null, f.filter ? '筛选' : null, f.search ? '搜索' : null, f.detail.comments ? '评论' : null,
         f.detail.actions ? '互动' : null, f.history ? '历史' : null, f.danmaku ? '弹幕' : null, f.subtitles ? '字幕' : null,
-        f.progress ? '进度上报' : null, f.fairPlay ? 'FairPlay' : null, s.links ? '链接' : null].filter(Boolean).join(' · ')
+        f.progress ? '进度上报' : null, f.fairPlay ? 'FairPlay' : null, s.links ? '链接' : null].filter(Boolean)
     }
-    return { capabilities }
+    const count = (key) => store.manifest.sources.filter((s) => (s.visibility ?? 'auto') === key).length
+    const setVisibility = (s, visibility) => {
+      if (s.visibility === visibility) return
+      saving.value = s.id
+      attempt(async () => {
+        await api('/debug/api/visibility', { method: 'POST', body: { source: s.id, visibility } })
+        s.visibility = visibility
+        toast(`${s.name}：${VISIBILITY[visibility][0]}（已写回配置）`)
+      }).finally(() => { saving.value = null })
+    }
+    return { capabilities, count, setVisibility, saving }
   },
 }
+const STATE = { ready: '正常', starting: '启动中', degraded: '部分可用', broken: '不可用' }
 
 const ConsoleView = {
   template: `<div><h1 class="page-title">接口</h1>
@@ -1106,6 +1149,13 @@ const Guide = {
 const guideMode = computed(() => (route.path === '/watch' ? (store.watchGuide ? 'overlay' : 'none') : store.guide ? 'wide' : 'rail'))
 watch(() => route.path, () => { store.watchGuide = false })
 
+/** 源在 App 里怎么出现（配置里的 visibility）。 */
+const VISIBILITY = {
+  auto: ['直接显示', 'App 发现这个服务后，直接把这个源列进切换站点。', 'home'],
+  discoverable: ['可添加', '列在 App 的「可添加的源」里，用户加上才进切换站点（默认）。', 'playlist'],
+  hidden: ['隐藏', 'App 看不到这个源；接口照常可用，只有调试页列出它。', 'close'],
+}
+
 const VIEWS = {
   '/': FeedView, '/shelf': FeedView, '/channels': ChannelsView, '/more': MoreView, '/filter': FilterView, '/search': SearchView,
   '/watch': WatchView, '/uploader': UploaderView, '/history': HistoryView, '/you': YouView,
@@ -1134,7 +1184,7 @@ const App = {
 
 const app = createApp(App)
 Object.assign(app.config.globalProperties, {
-  store, route, source, sid, href, msg, qs, fmtDuration, fmtCount, ago, watchHref, itemLink, shelfHref, shelfIcon, episodeItem, historyItem,
+  store, route, source, sid, VISIBILITY, STATE, href, msg, qs, fmtDuration, fmtCount, ago, watchHref, itemLink, shelfHref, shelfIcon, episodeItem, historyItem,
   methodName, startLogin, submitCookies, closeLogin, logout, selectSource, loadManifest, SOURCELESS, BASE, JSON,
 })
 for (const [name, component] of Object.entries({

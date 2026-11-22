@@ -134,9 +134,20 @@ export interface FeedFeatures {
   pinned?: Channel[]
 }
 
+/**
+ * 源在 App 里怎么出现（§3.4，服务端配置决定）：
+ * - `auto`：直接列进 App 的源（切换站点里就有）。
+ * - `discoverable`：App 发现了这个服务时，列在「可添加的源」里，用户加上才进切换站点（默认）。
+ * - `hidden`：不出现在 manifest 里（只有调试页 `manifest?all=1` 看得到）。
+ * 旧服务没有这个字段：App 当 `auto`。
+ */
+export type SourceVisibility = 'auto' | 'discoverable' | 'hidden'
+
 export interface SourceManifest {
   id: string
   name: string
+  /** 默认 `discoverable`。 */
+  visibility: SourceVisibility
   brand: Brand
   status: { state: SourceState; message?: string }
   account: AccountManifest

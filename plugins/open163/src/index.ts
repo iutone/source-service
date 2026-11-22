@@ -171,7 +171,7 @@ export function createOpen163Source(options: Open163Options = {}): SourcePlugin 
             sections: blocks.map((block) => ({
               id: `home-${block.id}`,
               title: block.title,
-              style: 'row',
+              style: 'grid',
               items: block.items.map((item): MediaItem => ({
                 id: item.plid, title: item.title, subtitle: item.note, landscapeURL: item.image,
                 target: item.mid ? { video: videoID(item.plid, item.mid) } : { show: item.plid },

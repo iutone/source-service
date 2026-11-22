@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { Agent, EnvHttpProxyAgent, ProxyAgent, setGlobalDispatcher } from 'undici'
 import { advertise, createServer, ExitPool, YtDlp, type Logger } from '@iyt-source/kit'
 import { check } from './check.ts'
-import { loadConfig } from './config.ts'
+import { loadConfig, saveVisibility } from './config.ts'
 import { loadPlugin, pluginsDir } from './plugins.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -33,7 +33,7 @@ async function serve(args: string[]) {
   const sources = []
   for (const source of config.sources) {
     try {
-      sources.push({ id: source.id, plugin: await loadPlugin(source.plugin, source.options ?? {}, { dataDir: config.dataDir, log }) })
+      sources.push({ id: source.id, visibility: source.visibility, plugin: await loadPlugin(source.plugin, source.options ?? {}, { dataDir: config.dataDir, log }) })
     } catch (error) {
       log.error(`源 ${source.id}（${source.plugin}）加载失败`, { error: String(error) })
     }
@@ -56,6 +56,7 @@ async function serve(args: string[]) {
     ytdlp,
     exits,
     debug: config.debug,
+    saveVisibility: (id, visibility) => saveVisibility(path, id, visibility),
     localNetworkOnly: process.env.IYT_ALLOW_ANY_PEER !== '1',
     logger: process.env.IYT_LOG_REQUESTS === '1',
   })

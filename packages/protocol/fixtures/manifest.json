@@ -13,6 +13,7 @@
     {
       "id": "sample",
       "name": "示例平台",
+      "visibility": "discoverable",
       "brand": {
         "logo": "https://img.example.com/logo.png",
         "tabIcon": "https://img.example.com/tab.png",
