@@ -637,7 +637,8 @@ export interface PlaybackMedia {
 export interface ResolveRequest {
   video: string
   show?: string | null
-  preferences?: { maxQualityRank?: number | null; language?: string | null; adaptive?: boolean }
+  /** `codecs`：客户端能解的编码（RFC 6381 前缀，如 `avc1`、`hvc1`、`mp4a`、`ac-3`）；缺省 = 不限。 */
+  preferences?: { maxQualityRank?: number | null; language?: string | null; adaptive?: boolean; codecs?: string[] | null }
 }
 
 export type ProgressEvent = 'start' | 'progress' | 'seek' | 'leave' | 'end'
