@@ -1,4 +1,4 @@
-import { hostname } from 'node:os'
+import { hostname, networkInterfaces } from 'node:os'
 import { Bonjour, type Service } from 'bonjour-service'
 import { BASE_PATH, BONJOUR_TYPE, PROTOCOL_VERSION } from '@iyt-source/protocol'
 
@@ -28,6 +28,11 @@ export function advertise(options: { name: string; port: number; serverId: strin
       host: localHostName(),
       txt: { v: String(PROTOCOL_VERSION), id: options.serverId, path: BASE_PATH },
     })
+    // bonjour-service 把每块网卡的地址都发成 A / AAAA 记录，NAS 上就混进了 Docker、LXC 网桥的内部地址
+    // （172.29.0.1、10.0.5.1……），App 挑中它们就连不上。只留局域网网卡的。
+    const records = service.records.bind(service)
+    const keep = new Set(lanAddresses())
+    service.records = () => records().filter((record) => (record.type !== 'A' && record.type !== 'AAAA') || keep.has(String(record.data)))
     service.on?.('error', (error: Error) => {
       options.onError?.(error)
       scheduleRestart()
@@ -72,4 +77,21 @@ export function advertise(options: { name: string; port: number; serverId: strin
 export function localHostName(name = hostname()): string {
   const base = name.replace(/\.$/, '').replace(/\.local$/i, '')
   return `${base}.local`
+}
+
+/** 容器、虚拟机、VPN 的虚拟网卡（不在局域网上）。注意 QNAP 的局域网网卡本身就叫 qvs0，是个网桥，不能按「br」一概排除。 */
+const VIRTUAL = /^(docker\d*|br-[0-9a-f]+|veth|lxcbr|lxdbr|virbr|vnet|cni|flannel|cali|tun|tap|utun|wg|zt|tailscale|awdl|llw|bridge\d+|vmnet|vboxnet)/i
+
+/** 局域网网卡的地址（A / AAAA 记录用）：排除回环、虚拟网卡、IPv4 自动地址 169.254。 */
+export function lanAddresses(interfaces = networkInterfaces()): string[] {
+  const out: string[] = []
+  for (const [name, addresses] of Object.entries(interfaces)) {
+    if (VIRTUAL.test(name)) continue
+    for (const address of addresses ?? []) {
+      if (address.internal || address.mac === '00:00:00:00:00:00') continue
+      if (address.family === 'IPv4' && address.address.startsWith('169.254.')) continue
+      out.push(address.address)
+    }
+  }
+  return out
 }
